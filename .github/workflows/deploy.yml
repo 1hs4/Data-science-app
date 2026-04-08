@@ -18,7 +18,8 @@ jobs:
 
       - name: Install R packages
         run: |
-          Rscript -e "install.packages(c('rsconnect','shiny','shinydashboard','DT','readxl','moments','corrplot','RColorBrewer','BSDA','plotrix','ggplot2','car','MASS','lmtest','bslib','shinycssloaders','plotly'), repos='https://cloud.r-project.org')"
+          Rscript -e "install.packages(c('rsconnect','shiny','shinydashboard','DT','readxl','moments','corrplot','RColorBrewer','BSDA','plotrix','ggplot2','car','MASS','lmtest','bslib','shinycssloaders','plotly'), repos='https://cloud.r-project.org', dependencies=TRUE)"
+          Rscript -e "if (!requireNamespace('rsconnect', quietly = TRUE)) stop('rsconnect failed to install')"
 
       - name: Deploy to shinyapps.io
         env:
