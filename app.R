@@ -2077,7 +2077,7 @@ server <- function(input, output, session) {
   }
 
   # Default dataset (loaded automatically at startup)
-  default_data_path <- "d:/KFUPM/T-252/Stat 413/Data/P2_DeliveryTime.xlsx"
+  default_data_path <- "data/P2_DeliveryTime.xlsx"
   default_data <- tryCatch({
     ext0 <- tolower(tools::file_ext(default_data_path))
     df_default <- if (ext0 %in% c("xlsx", "xls")) {
