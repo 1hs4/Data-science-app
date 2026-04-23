@@ -14,8 +14,9 @@ library(BSDA)
 library(plotrix)
 library(ggplot2)
 library(car)
-library(MASS)     # boxcox
-library(lmtest)   # bptest, dwtest
+library(MASS) # boxcox
+library(lmtest) # bptest, dwtest
+library(boot) # cv.glm
 library(bslib)
 
 spn <- function(x) {
@@ -27,6 +28,7 @@ spn <- function(x) {
 }
 
 HAS_PLOTLY <- requireNamespace("plotly", quietly = TRUE)
+has_glmnet <- function() requireNamespace("glmnet", quietly = TRUE)
 
 plotly_output_safe <- function(outputId, height = "400px") {
   if (HAS_PLOTLY) {
@@ -43,13 +45,13 @@ plotly_output_safe <- function(outputId, height = "400px") {
 # UI Definition
 ui <- dashboardPage(
   skin = "blue",
-  
+
   # Header
   dashboardHeader(
     title = "Universal Statistical Analysis",
     titleWidth = 350
   ),
-  
+
   # Sidebar
   dashboardSidebar(
     width = 250,
@@ -63,6 +65,8 @@ ui <- dashboardPage(
       menuItem("Hypothesis Tests", tabName = "tests", icon = icon("calculator")),
       menuItem("Simple Linear Regression", tabName = "slr", icon = icon("chart-line")),
       menuItem("Multiple Linear Regression", tabName = "mlr", icon = icon("project-diagram")),
+      menuItem("Multicollinearity", tabName = "ch9multi", icon = icon("bezier-curve")),
+      menuItem("Model Building", tabName = "modelbuilding", icon = icon("sitemap")),
       menuItem("Indicator Variable", tabName = "indicator", icon = icon("tags")),
       menuItem("Model Adequacy", tabName = "modeladequacy", icon = icon("stethoscope")),
       menuItem("Box-Cox & Box-Tidwell", tabName = "boxtrans", icon = icon("magic")),
@@ -70,12 +74,14 @@ ui <- dashboardPage(
       menuItem("Summary Report", tabName = "report", icon = icon("file-alt"))
     )
   ),
-  
+
   # Body
   dashboardBody(
     tags$head(
-      tags$link(rel = "stylesheet",
-                href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"),
+      tags$link(
+        rel = "stylesheet",
+        href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      ),
       tags$script(HTML("
         Shiny.addCustomMessageHandler('setDarkMode', function(message) {
           if (message && message.enabled) {
@@ -300,17 +306,137 @@ ui <- dashboardPage(
           border-radius:5px; padding:10px 14px; margin-bottom:12px;
           font-size:13px; color:#0d47a1;
         }
+        .mb-rule-row {
+          display:flex;
+          gap:8px;
+          flex-wrap:wrap;
+          margin-bottom:12px;
+        }
+        .mb-pill {
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          border-radius:999px;
+          padding:6px 10px;
+          font-size:12px;
+          font-weight:700;
+          background:#fff7ed;
+          color:#9a3412;
+          border:1px solid #fed7aa;
+        }
+        .mb-step-list {
+          display:flex;
+          flex-direction:column;
+          gap:8px;
+        }
+        .mb-step-row {
+          display:grid;
+          grid-template-columns:34px 88px 1fr auto;
+          align-items:center;
+          gap:8px;
+          padding:10px 12px;
+          border:1px solid #e5e7eb;
+          border-radius:8px;
+          background:#fff;
+        }
+        .mb-step-num {
+          width:26px;
+          height:26px;
+          border-radius:50%;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:#eff6ff;
+          color:#1d4ed8;
+          font-weight:800;
+          font-size:12px;
+        }
+        .mb-action {
+          border-radius:999px;
+          padding:4px 8px;
+          font-size:11px;
+          font-weight:800;
+          text-align:center;
+        }
+        .mb-action-add { background:#dcfce7; color:#166534; }
+        .mb-action-remove { background:#fee2e2; color:#991b1b; }
+        .mb-action-stop { background:#e5e7eb; color:#374151; }
+        .mb-step-predictor {
+          font-weight:700;
+          color:#111827;
+          min-width:0;
+          word-break:break-word;
+        }
+        .mb-step-p {
+          font-variant-numeric:tabular-nums;
+          font-weight:700;
+          color:#4b5563;
+        }
+        .mb-final-chip {
+          margin-top:12px;
+          padding:10px 12px;
+          border-radius:8px;
+          background:#f0fdf4;
+          border:1px solid #bbf7d0;
+          color:#14532d;
+          font-weight:800;
+          word-break:break-word;
+        }
+        .mb-metric-grid {
+          display:grid;
+          grid-template-columns:repeat(4, minmax(120px, 1fr));
+          gap:10px;
+          margin-bottom:12px;
+        }
+        .mb-metric {
+          border:1px solid #e5e7eb;
+          border-radius:8px;
+          padding:12px;
+          background:#ffffff;
+        }
+        .mb-metric span {
+          display:block;
+          color:#6b7280;
+          font-size:11px;
+          font-weight:800;
+          text-transform:uppercase;
+        }
+        .mb-metric strong {
+          display:block;
+          margin-top:4px;
+          color:#111827;
+          font-size:20px;
+        }
+        .mb-equation {
+          padding:11px 12px;
+          border-radius:8px;
+          background:#eff6ff;
+          border:1px solid #bfdbfe;
+          color:#1e3a8a;
+          font-weight:800;
+          word-break:break-word;
+        }
+        body.dark-mode-pro .mb-step-row,
+        body.dark-mode-pro .mb-metric {
+          background:#111827;
+          border-color:#334155;
+        }
+        body.dark-mode-pro .mb-step-predictor,
+        body.dark-mode-pro .mb-metric strong {
+          color:#e5e7eb;
+        }
       "))
     ),
-    
     conditionalPanel(
       condition = "input.tabs == 'upload' || input.tabs == 'preview'",
       fluidRow(
         box(
           width = 12, status = "primary", solidHeader = FALSE, class = "quick-actions",
           fluidRow(
-            column(6,
-              tags$div(style="display:flex; gap:8px; flex-wrap:wrap;",
+            column(
+              6,
+              tags$div(
+                style = "display:flex; gap:8px; flex-wrap:wrap;",
                 actionButton("qaSample", "Sample Data", icon = icon("database"), class = "btn btn-primary"),
                 actionButton("qaReset", "Reset Data", icon = icon("undo"), class = "btn btn-default"),
                 actionButton("presetPriceMileage", "Preset: Price vs Mileage", icon = icon("bolt"), class = "btn btn-info"),
@@ -318,11 +444,14 @@ ui <- dashboardPage(
                 downloadButton("downloadReport", "Download Report", class = "btn btn-success")
               )
             ),
-            column(3,
+            column(
+              3,
               uiOutput("globalVarSearchUI")
             ),
-            column(3,
-              tags$div(style="display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;",
+            column(
+              3,
+              tags$div(
+                style = "display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;",
                 checkboxInput("interactivePlots", "Interactive", value = HAS_PLOTLY),
                 checkboxInput("darkModeToggle", "Dark mode", FALSE),
                 downloadButton("downloadState", "Save Session", class = "btn btn-success"),
@@ -332,7 +461,6 @@ ui <- dashboardPage(
           )
         )
       ),
-
       fluidRow(
         class = "kpi-row",
         infoBoxOutput("kpiRows", width = 3),
@@ -341,7 +469,6 @@ ui <- dashboardPage(
         infoBoxOutput("kpiTypes", width = 3)
       )
     ),
-
     tabItems(
       # Upload Tab
       tabItem(
@@ -352,25 +479,26 @@ ui <- dashboardPage(
             status = "primary",
             solidHeader = TRUE,
             width = 12,
-            
             fluidRow(
-              column(6,
-                fileInput("datafile", 
-                          "Choose CSV or Excel File",
-                          accept = c(".csv", ".xlsx", ".xls"),
-                          buttonLabel = "Browse...",
-                          placeholder = "No file selected")
+              column(
+                6,
+                fileInput("datafile",
+                  "Choose CSV or Excel File",
+                  accept = c(".csv", ".xlsx", ".xls"),
+                  buttonLabel = "Browse...",
+                  placeholder = "No file selected"
+                )
               ),
-              column(6,
+              column(
+                6,
                 br(),
-                actionButton("analyzeBtn", "Analyze Data", 
-                           class = "btn-analyze",
-                           icon = icon("chart-bar"))
+                actionButton("analyzeBtn", "Analyze Data",
+                  class = "btn-analyze",
+                  icon = icon("chart-bar")
+                )
               )
             ),
-            
             hr(),
-            
             h4("Instructions:"),
             tags$ul(
               tags$li("Upload any CSV or Excel file with your data (maximum 50 MB)"),
@@ -379,35 +507,32 @@ ui <- dashboardPage(
               tags$li("Select variables for analysis in each tab"),
               tags$li("Click 'Analyze Data' to confirm your upload")
             ),
-
             tags$div(
               style = "background-color: #dff0d8; padding: 10px; border-radius: 5px; margin-top: 10px;",
               tags$strong(icon("check-circle"), " Default Dataset Loaded:"),
               " The app starts with P2_DeliveryTime.xlsx, so you can analyze immediately without uploading."
             ),
-            
             tags$div(
               style = "background-color: #d9edf7; padding: 10px; border-radius: 5px; margin-top: 10px;",
               tags$strong(icon("info-circle"), " File Size Limit:"),
               " Maximum upload size is 50 MB. For larger datasets, consider filtering or sampling your data before upload."
             ),
-            
             hr(),
-            
             h4("Variable Detection:"),
             fluidRow(
-              column(6,
+              column(
+                6,
                 h5("Numerical Variables:"),
                 verbatimTextOutput("numericVars")
               ),
-              column(6,
+              column(
+                6,
                 h5("Categorical Variables:"),
                 verbatimTextOutput("categoricalVars")
               )
             )
           )
         ),
-
         fluidRow(
           box(
             title = tagList(icon("sliders-h"), " Data Cleaning"),
@@ -417,23 +542,33 @@ ui <- dashboardPage(
             collapsible = TRUE,
             collapsed = TRUE,
             fluidRow(
-              column(3,
+              column(
+                3,
                 selectInput("cleanMissing", "Missing Values:",
-                            choices = c("Keep as is" = "keep",
-                                        "Drop rows with missing" = "drop",
-                                        "Impute (median/mode)" = "impute"),
-                            selected = "keep")
+                  choices = c(
+                    "Keep as is" = "keep",
+                    "Drop rows with missing" = "drop",
+                    "Impute (median/mode)" = "impute"
+                  ),
+                  selected = "keep"
+                )
               ),
-              column(3,
+              column(
+                3,
                 selectInput("cleanOutliers", "Outliers (IQR):",
-                            choices = c("Remove" = "remove",
-                                        "Keep" = "keep"),
-                            selected = "remove")
+                  choices = c(
+                    "Remove" = "remove",
+                    "Keep" = "keep"
+                  ),
+                  selected = "remove"
+                )
               ),
-              column(3,
+              column(
+                3,
                 uiOutput("cleanLogVarsUI")
               ),
-              column(3,
+              column(
+                3,
                 br(),
                 actionButton("applyCleaning", "Apply Cleaning", class = "btn btn-warning")
               )
@@ -441,14 +576,13 @@ ui <- dashboardPage(
             tags$p(class = "hint-text", "Tip: log transform applies log1p(x) to selected numeric variables.")
           )
         ),
-        
         fluidRow(
           infoBoxOutput("rowCountBox", width = 4),
           infoBoxOutput("colCountBox", width = 4),
           infoBoxOutput("statusBox", width = 4)
         )
       ),
-      
+
       # Data Preview Tab
       tabItem(
         tabName = "preview",
@@ -458,18 +592,17 @@ ui <- dashboardPage(
             status = "primary",
             solidHeader = TRUE,
             width = 12,
-            
             spn(DTOutput("dataPreview")),
-            
             hr(),
-            
             h4("Data Summary"),
             fluidRow(
-              column(7,
+              column(
+                7,
                 h5("Numeric Variables"),
                 spn(DT::DTOutput("dataSummaryNumeric"))
               ),
-              column(5,
+              column(
+                5,
                 h5("Categorical Variables"),
                 spn(DT::DTOutput("dataSummaryCategorical"))
               )
@@ -477,7 +610,7 @@ ui <- dashboardPage(
           )
         )
       ),
-      
+
       # Variable Analysis (Single + Two Variables in one page)
       tabItem(
         tabName = "varanalysis",
@@ -487,54 +620,63 @@ ui <- dashboardPage(
             status = "primary",
             solidHeader = TRUE,
             width = 12,
-
             fluidRow(
-              column(4,
+              column(
+                4,
                 selectInput("analysisMode", "Number of Variables to Analyze:",
-                            choices = c("1 Variable" = "single",
-                                        "Multiple Variables (2+)" = "multi"),
-                            selected = "single")
-              )
-            ),
-
-            conditionalPanel(
-              condition = "input.analysisMode == 'single'",
-              fluidRow(
-                column(4,
-                  selectInput("singleVarType", "Variable Type:",
-                              choices = c("Numerical", "Categorical"))
-                ),
-                column(4,
-                  uiOutput("singleVarSelect")
-                ),
-                column(4,
-                  br(),
-                  actionButton("runSingleAnalysis", "Run Analysis",
-                               class = "btn btn-primary")
+                  choices = c(
+                    "1 Variable" = "single",
+                    "Multiple Variables (2+)" = "multi"
+                  ),
+                  selected = "single"
                 )
               )
             ),
-
+            conditionalPanel(
+              condition = "input.analysisMode == 'single'",
+              fluidRow(
+                column(
+                  4,
+                  selectInput("singleVarType", "Variable Type:",
+                    choices = c("Numerical", "Categorical")
+                  )
+                ),
+                column(
+                  4,
+                  uiOutput("singleVarSelect")
+                ),
+                column(
+                  4,
+                  br(),
+                  actionButton("runSingleAnalysis", "Run Analysis",
+                    class = "btn btn-primary"
+                  )
+                )
+              )
+            ),
             conditionalPanel(
               condition = "input.analysisMode == 'multi'",
               fluidRow(
-                column(4,
+                column(
+                  4,
                   selectInput("multiVarCount", "How many variables?",
-                              choices = as.character(2:6),
-                              selected = "2")
+                    choices = as.character(2:6),
+                    selected = "2"
+                  )
                 )
               ),
               uiOutput("multiVarRows"),
               fluidRow(
-                column(12,
+                column(
+                  12,
                   actionButton("runMultiAnalysis", "Run Analysis",
-                               class = "btn btn-primary")
+                    class = "btn btn-primary"
+                  )
                 )
               )
             )
           )
         ),
-
         conditionalPanel(
           condition = "input.analysisMode == 'single'",
           fluidRow(
@@ -561,7 +703,6 @@ ui <- dashboardPage(
             )
           )
         ),
-
         conditionalPanel(
           condition = "input.analysisMode == 'multi'",
           fluidRow(
@@ -589,7 +730,7 @@ ui <- dashboardPage(
           )
         )
       ),
-      
+
       # Correlation Matrix
       tabItem(
         tabName = "correlation",
@@ -599,20 +740,21 @@ ui <- dashboardPage(
             status = "warning",
             solidHeader = TRUE,
             width = 12,
-            
             fluidRow(
-              column(8,
+              column(
+                8,
                 uiOutput("corrVarsSelect")
               ),
-              column(4,
+              column(
+                4,
                 br(),
-                actionButton("runCorrAnalysis", "Calculate Correlation", 
-                           class = "btn btn-primary")
+                actionButton("runCorrAnalysis", "Calculate Correlation",
+                  class = "btn btn-primary"
+                )
               )
             )
           )
         ),
-        
         fluidRow(
           box(
             title = "Correlation Matrix",
@@ -629,7 +771,6 @@ ui <- dashboardPage(
             spn(plotOutput("corrHeatmap", height = "400px"))
           )
         ),
-        
         fluidRow(
           box(
             title = "Scatter Plot Matrix",
@@ -640,7 +781,7 @@ ui <- dashboardPage(
           )
         )
       ),
-      
+
       # Categorical Suite (Single + Cross-Tab + Multi-Categorical)
       tabItem(
         tabName = "catsuite",
@@ -651,17 +792,20 @@ ui <- dashboardPage(
             solidHeader = TRUE,
             width = 12,
             fluidRow(
-              column(5,
+              column(
+                5,
                 selectInput("catSuiteMode", "Analysis Type:",
-                            choices = c("Single Categorical Variable" = "singlecat",
-                                        "Cross-Tabulation (2 Variables)" = "crosstab",
-                                        "Multi-Categorical (3+ Variables)" = "multicat"),
-                            selected = "singlecat")
+                  choices = c(
+                    "Single Categorical Variable" = "singlecat",
+                    "Cross-Tabulation (2 Variables)" = "crosstab",
+                    "Multi-Categorical (3+ Variables)" = "multicat"
+                  ),
+                  selected = "singlecat"
+                )
               )
             )
           )
         ),
-
         conditionalPanel(
           condition = "input.catSuiteMode == 'singlecat'",
           fluidRow(
@@ -672,11 +816,14 @@ ui <- dashboardPage(
               width = 12,
               fluidRow(
                 column(4, uiOutput("catVarSelect")),
-                column(4,
+                column(
+                  4,
                   selectInput("catPlotType", "Plot Type:",
-                              choices = c("Bar Plot", "Pie Chart", "Both"))
+                    choices = c("Bar Plot", "Pie Chart", "Both")
+                  )
                 ),
-                column(4,
+                column(
+                  4,
                   br(),
                   actionButton("runCatAnalysis", "Run Analysis", class = "btn btn-primary")
                 )
@@ -711,7 +858,6 @@ ui <- dashboardPage(
             )
           )
         ),
-
         conditionalPanel(
           condition = "input.catSuiteMode == 'crosstab'",
           fluidRow(
@@ -723,7 +869,8 @@ ui <- dashboardPage(
               fluidRow(
                 column(4, uiOutput("crosstabVar1Select")),
                 column(4, uiOutput("crosstabVar2Select")),
-                column(4,
+                column(
+                  4,
                   br(),
                   actionButton("runCrosstabAnalysis", "Run Analysis", class = "btn btn-primary")
                 )
@@ -760,12 +907,12 @@ ui <- dashboardPage(
               solidHeader = TRUE,
               width = 6,
               selectInput("crosstabPlotType", "Plot Type:",
-                         choices = c("Stacked Bar", "Grouped Bar", "Mosaic Plot")),
+                choices = c("Stacked Bar", "Grouped Bar", "Mosaic Plot")
+              ),
               spn(plotOutput("crosstabPlot", height = "350px"))
             )
           )
         ),
-
         conditionalPanel(
           condition = "input.catSuiteMode == 'multicat'",
           fluidRow(
@@ -782,11 +929,13 @@ ui <- dashboardPage(
                 column(3, uiOutput("multiCatVar4Select"))
               ),
               fluidRow(
-                column(12,
+                column(
+                  12,
                   br(),
                   actionButton("runMultiCatAnalysis", "Run Multi-Way Analysis",
-                               class = "btn btn-warning btn-lg",
-                               icon = icon("chart-bar"))
+                    class = "btn btn-warning btn-lg",
+                    icon = icon("chart-bar")
+                  )
                 )
               )
             )
@@ -828,12 +977,16 @@ ui <- dashboardPage(
               solidHeader = TRUE,
               width = 12,
               fluidRow(
-                column(4,
+                column(
+                  4,
                   selectInput("multiCatPlotType", "Visualization Type:",
-                             choices = c("Grouped Bar Chart",
-                                         "Faceted Bar Chart",
-                                         "Mosaic Plot",
-                                         "Heatmap"))
+                    choices = c(
+                      "Grouped Bar Chart",
+                      "Faceted Bar Chart",
+                      "Mosaic Plot",
+                      "Heatmap"
+                    )
+                  )
                 ),
                 column(8, uiOutput("multiCatPlotOptions"))
               ),
@@ -851,7 +1004,7 @@ ui <- dashboardPage(
           )
         )
       ),
-      
+
       # Hypothesis Tests
       tabItem(
         tabName = "tests",
@@ -861,27 +1014,24 @@ ui <- dashboardPage(
             status = "success",
             solidHeader = TRUE,
             width = 12,
-            
             selectInput("testType", "Select Test Type:",
-                       choices = c(
-                         "One-Sample T-Test",
-                         "Two-Sample T-Test",
-                         "Paired T-Test",
-                         "One-Way ANOVA (F-Test)",
-                         "One-Sample Wilcoxon Test",
-                         "Two-Sample Wilcoxon Test",
-                         "Normality Test (Shapiro-Wilk)"
-                       )),
-            
+              choices = c(
+                "One-Sample T-Test",
+                "Two-Sample T-Test",
+                "Paired T-Test",
+                "One-Way ANOVA (F-Test)",
+                "One-Sample Wilcoxon Test",
+                "Two-Sample Wilcoxon Test",
+                "Normality Test (Shapiro-Wilk)"
+              )
+            ),
             uiOutput("testVarInputs"),
-            
             hr(),
-            
-            actionButton("runHypothesisTest", "Run Test", 
-                       class = "btn btn-primary")
+            actionButton("runHypothesisTest", "Run Test",
+              class = "btn btn-primary"
+            )
           )
         ),
-        
         fluidRow(
           box(
             title = "Test Results",
@@ -899,11 +1049,11 @@ ui <- dashboardPage(
           )
         )
       ),
-      
+
       # Summary Report - REDESIGNED FOR ENGAGEMENT
       tabItem(
         tabName = "report",
-        
+
         # Header with download button
         fluidRow(
           box(
@@ -911,20 +1061,22 @@ ui <- dashboardPage(
             status = "primary",
             solidHeader = TRUE,
             width = 12,
-            
             fluidRow(
-              column(10,
+              column(
+                10,
                 h4("Explore your dataset with interactive visualizations and insights")
               ),
-              column(2,
-                downloadButton("downloadReport", "Download Report", 
-                             class = "btn-success btn-block",
-                             icon = icon("download"))
+              column(
+                2,
+                downloadButton("downloadReport", "Download Report",
+                  class = "btn-success btn-block",
+                  icon = icon("download")
+                )
               )
             )
           )
         ),
-        
+
         # Key Metrics Info Boxes
         fluidRow(
           infoBoxOutput("summaryRows", width = 3),
@@ -932,7 +1084,7 @@ ui <- dashboardPage(
           infoBoxOutput("summaryNumeric", width = 3),
           infoBoxOutput("summaryCategorical", width = 3)
         ),
-        
+
         # Dataset Overview Cards
         fluidRow(
           box(
@@ -941,21 +1093,18 @@ ui <- dashboardPage(
             solidHeader = TRUE,
             width = 6,
             height = "400px",
-            
             DTOutput("variableTable")
           ),
-          
           box(
             title = tagList(icon("chart-pie"), " Variable Type Distribution"),
             status = "info",
             solidHeader = TRUE,
             width = 6,
             height = "400px",
-            
             plotOutput("variableTypePlot", height = "320px")
           )
         ),
-        
+
         # Statistical Summary
         fluidRow(
           box(
@@ -964,11 +1113,10 @@ ui <- dashboardPage(
             solidHeader = TRUE,
             width = 12,
             collapsible = TRUE,
-            
             DTOutput("numericSummaryTable")
           )
         ),
-        
+
         # Data Quality Section
         fluidRow(
           box(
@@ -976,25 +1124,22 @@ ui <- dashboardPage(
             status = "warning",
             solidHeader = TRUE,
             width = 6,
-            
             h4("Missing Values Analysis"),
             plotOutput("missingPlot", height = "300px"),
             hr(),
             verbatimTextOutput("missingStats")
           ),
-          
           box(
             title = tagList(icon("chart-bar"), " Data Completeness"),
             status = "warning",
             solidHeader = TRUE,
             width = 6,
-            
             plotOutput("completenessPlot", height = "300px"),
             hr(),
             uiOutput("dataQualityScore")
           )
         ),
-        
+
         # Distribution Insights
         fluidRow(
           box(
@@ -1004,12 +1149,11 @@ ui <- dashboardPage(
             width = 12,
             collapsible = TRUE,
             collapsed = TRUE,
-            
             uiOutput("distributionSelect"),
             plotOutput("distributionPlot", height = "400px")
           )
         ),
-        
+
         # Advanced Insights
         fluidRow(
           box(
@@ -1017,7 +1161,6 @@ ui <- dashboardPage(
             status = "info",
             solidHeader = TRUE,
             width = 12,
-            
             htmlOutput("dataInsights")
           )
         )
@@ -1030,51 +1173,55 @@ ui <- dashboardPage(
         tabName = "slr",
 
         # ── Step 1: Setup ──────────────────────────────────────
-        tags$div(class = "reg-step-banner",
+        tags$div(
+          class = "reg-step-banner",
           tags$div(class = "step-badge", "1"),
           tags$div(
             tags$h4("Model Setup"),
             tags$p("Select your response (Y) and predictor (X) variable, then click Fit Model.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
             status = "primary", solidHeader = FALSE,
             width = 12, style = "padding: 18px;",
-
             fluidRow(
-              column(4,
+              column(
+                4,
                 tags$div(class = "section-label", "Response Variable (Y)"),
                 uiOutput("slrYSelect")
               ),
-              column(4,
+              column(
+                4,
                 tags$div(class = "section-label", "Predictor Variable (X)"),
                 uiOutput("slrXSelect")
               ),
-              column(4,
+              column(
+                4,
                 tags$div(class = "section-label", "Options"),
                 checkboxInput("slrNoIntercept",
                   tagList(icon("minus-circle"), " Force intercept through origin (β₀ = 0)"),
-                  value = FALSE),
+                  value = FALSE
+                ),
                 br(),
                 actionButton("runSLR", tagList(icon("play"), " Fit SLR Model"),
-                             class = "fit-btn")
+                  class = "fit-btn"
+                )
               )
             )
           )
         ),
 
         # ── Step 2: Exploratory Plot ───────────────────────────
-        tags$div(class = "reg-step-banner info",
+        tags$div(
+          class = "reg-step-banner info",
           tags$div(class = "step-badge", "2"),
           tags$div(
             tags$h4("Exploratory Plot"),
             tags$p("Scatter plot with the fitted regression line.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
@@ -1085,57 +1232,56 @@ ui <- dashboardPage(
         ),
 
         # ── Step 3: Model Results (tabbed) ────────────────────
-        tags$div(class = "reg-step-banner success",
+        tags$div(
+          class = "reg-step-banner success",
           tags$div(class = "step-badge", "3"),
           tags$div(
             tags$h4("Model Results"),
             tags$p("Summary, ANOVA, confidence intervals, and correlation — use the tabs below.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
             title = NULL, solidHeader = FALSE,
             status = "success", width = 12,
-
             tabsetPanel(
               type = "tabs",
-
               tabPanel(
                 tagList(icon("table"), " Model Summary"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Shows fitted coefficients, standard errors, t-statistics, p-values, R², and adjusted R²."
                 ),
                 verbatimTextOutput("slrSummary")
               ),
-
               tabPanel(
                 tagList(icon("calculator"), " ANOVA Table"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Tests overall model significance (F-test). A small p-value means the model explains\n                  a significant portion of the variation in Y."
                 ),
                 verbatimTextOutput("slrAnova")
               ),
-
               tabPanel(
                 tagList(icon("arrows-alt-h"), " Confidence Intervals"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " 95% confidence intervals for the regression coefficients (β₀ and β₁)."
                 ),
                 verbatimTextOutput("slrConfint")
               ),
-
               tabPanel(
                 tagList(icon("link"), " Correlation Tests"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Pearson (parametric), Spearman, and Kendall correlation tests between X and Y."
                 ),
@@ -1146,67 +1292,70 @@ ui <- dashboardPage(
         ),
 
         # ── Step 4: Prediction ────────────────────────────────
-        tags$div(class = "reg-step-banner warning",
+        tags$div(
+          class = "reg-step-banner warning",
           tags$div(class = "step-badge", "4"),
           tags$div(
             tags$h4("Prediction"),
             tags$p("Enter new X value(s) to get predicted Y values with intervals.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
             title = NULL, solidHeader = FALSE,
             status = "warning", width = 12,
             collapsible = TRUE, collapsed = FALSE,
-
             fluidRow(
-              column(8,
+              column(
+                8,
                 tags$div(class = "section-label", "New X Value(s)"),
-                textInput("slrNewX", label = NULL,
-                          placeholder = "Enter values separated by commas, e.g.  20, 30"),
-                tags$div(class = "hint-text",
+                textInput("slrNewX",
+                  label = NULL,
+                  placeholder = "Enter values separated by commas, e.g.  20, 30"
+                ),
+                tags$div(
+                  class = "hint-text",
                   icon("info-circle"), " Each value produces one row of output."
                 )
               ),
-              column(4,
+              column(
+                4,
                 br(),
                 actionButton("runSLRPredict",
-                             tagList(icon("magic"), " Predict"),
-                             class = "predict-btn")
+                  tagList(icon("magic"), " Predict"),
+                  class = "predict-btn"
+                )
               )
             ),
-
             hr(style = "margin: 16px 0;"),
-
             tabsetPanel(
               type = "pills",
-
               tabPanel(
                 tagList(icon("expand-arrows-alt"), " Prediction Interval"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Wider interval — covers where a single new observation is likely to fall."
                 ),
                 DT::DTOutput("slrPredInterval")
               ),
-
               tabPanel(
                 tagList(icon("compress-arrows-alt"), " Confidence Interval"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Narrower interval — estimates the mean response at the given X value."
                 ),
                 DT::DTOutput("slrConfInterval")
               ),
-
               tabPanel(
                 tagList(icon("search-location"), " Interpolation / Extrapolation"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Checks whether each new X falls inside (interpolation) or outside\n                  (EXTRAPOLATION) the observed data range. Extrapolation predictions are unreliable."
                 ),
@@ -1224,54 +1373,59 @@ ui <- dashboardPage(
         tabName = "mlr",
 
         # ── Step 1: Setup ──────────────────────────────────────
-        tags$div(class = "reg-step-banner",
+        tags$div(
+          class = "reg-step-banner",
           tags$div(class = "step-badge", "1"),
           tags$div(
             tags$h4("Model Setup"),
             tags$p("Choose the response (Y) and two or more predictor variables (X), then click Fit Model.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
             status = "primary", solidHeader = FALSE,
             width = 12, style = "padding: 18px;",
-
             fluidRow(
-              column(3,
+              column(
+                3,
                 tags$div(class = "section-label", "Response Variable (Y)"),
                 uiOutput("mlrYSelect")
               ),
-              column(6,
+              column(
+                6,
                 tags$div(class = "section-label", "Predictor Variables (X) — select 2 or more"),
                 uiOutput("mlrXSelect"),
-                tags$div(class = "hint-text",
+                tags$div(
+                  class = "hint-text",
                   icon("info-circle"), " Hold Ctrl / Cmd to select multiple variables."
                 )
               ),
-              column(3,
+              column(
+                3,
                 tags$div(class = "section-label", "Options"),
                 checkboxInput("mlrNoIntercept",
                   tagList(icon("minus-circle"), " Force intercept through origin"),
-                  value = FALSE),
+                  value = FALSE
+                ),
                 br(),
                 actionButton("runMLR", tagList(icon("play"), " Fit MLR Model"),
-                             class = "fit-btn")
+                  class = "fit-btn"
+                )
               )
             )
           )
         ),
 
         # ── Step 2: Exploratory Plots ──────────────────────────
-        tags$div(class = "reg-step-banner info",
+        tags$div(
+          class = "reg-step-banner info",
           tags$div(class = "step-badge", "2"),
           tags$div(
             tags$h4("Exploratory Plots"),
             tags$p("Scatter plot matrix and mixed correlation matrix for all selected variables.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
@@ -1296,57 +1450,56 @@ ui <- dashboardPage(
         ),
 
         # ── Step 3: Model Results (tabbed) ────────────────────
-        tags$div(class = "reg-step-banner success",
+        tags$div(
+          class = "reg-step-banner success",
           tags$div(class = "step-badge", "3"),
           tags$div(
             tags$h4("Model Results"),
             tags$p("Summary, ANOVA, partial F-tests, and confidence intervals — use the tabs below.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
             title = NULL, solidHeader = FALSE,
             status = "success", width = 12,
-
             tabsetPanel(
               type = "tabs",
-
               tabPanel(
                 tagList(icon("table"), " Model Summary"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Displays fitted coefficients, standard errors, t-tests for each predictor,\n                  overall F-test, R², and adjusted R²."
                 ),
                 verbatimTextOutput("mlrSummary")
               ),
-
               tabPanel(
                 tagList(icon("calculator"), " ANOVA Table"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Sequential (Type I) ANOVA — shows the contribution of each predictor\n                  added in order."
                 ),
                 verbatimTextOutput("mlrAnova")
               ),
-
               tabPanel(
                 tagList(icon("vial"), " Partial F-Tests"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Tests H₀: βᵢ = 0 for each predictor by comparing the full model against\n                  a reduced model without that predictor."
                 ),
                 verbatimTextOutput("mlrPartialF")
               ),
-
               tabPanel(
                 tagList(icon("arrows-alt-h"), " Confidence Intervals"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " 95% confidence intervals for all regression coefficients."
                 ),
@@ -1364,13 +1517,16 @@ ui <- dashboardPage(
                    box-shadow:0 2px 8px rgba(0,0,0,.15);",
           tags$div(class = "step-badge", "4"),
           tags$div(
-            tags$h4(style="margin:0;font-size:16px;font-weight:600;",
-                    "Multicollinearity Diagnostics — VIF"),
-            tags$p(style="margin:2px 0 0;font-size:12px;opacity:.85;",
-                   "VIF < 5: acceptable  |  5–10: moderate concern  |  > 10: severe — consider removing predictors.")
+            tags$h4(
+              style = "margin:0;font-size:16px;font-weight:600;",
+              "Multicollinearity Diagnostics — VIF"
+            ),
+            tags$p(
+              style = "margin:2px 0 0;font-size:12px;opacity:.85;",
+              "VIF < 5: acceptable  |  5–10: moderate concern  |  > 10: severe — consider removing predictors."
+            )
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
@@ -1387,67 +1543,65 @@ ui <- dashboardPage(
         ),
 
         # ── Step 5: Prediction ────────────────────────────────
-        tags$div(class = "reg-step-banner warning",
+        tags$div(
+          class = "reg-step-banner warning",
           tags$div(class = "step-badge", "5"),
           tags$div(
             tags$h4("Prediction"),
             tags$p("Enter values for each predictor to obtain fitted values and prediction/confidence intervals.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
             title = NULL, solidHeader = FALSE,
             status = "warning", width = 12,
             collapsible = TRUE, collapsed = FALSE,
-
             uiOutput("mlrNewXInputs"),
-
             fluidRow(
-              column(12, style = "margin-top:8px;",
-                tags$div(class = "hint-text",
+              column(12,
+                style = "margin-top:8px;",
+                tags$div(
+                  class = "hint-text",
                   icon("info-circle"),
                   " Enter one or more comma-separated values per predictor.
                     Each position across all fields corresponds to one new observation."
                 )
               )
             ),
-
             br(),
             actionButton("runMLRPredict",
-                         tagList(icon("magic"), " Predict"),
-                         class = "predict-btn"),
-
+              tagList(icon("magic"), " Predict"),
+              class = "predict-btn"
+            ),
             hr(style = "margin:16px 0;"),
-
             tabsetPanel(
               type = "pills",
-
               tabPanel(
                 tagList(icon("expand-arrows-alt"), " Prediction Interval"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Wider interval — covers where a new individual observation is likely to fall."
                 ),
                 DT::DTOutput("mlrPredInterval")
               ),
-
               tabPanel(
                 tagList(icon("compress-arrows-alt"), " Confidence Interval"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Narrower interval — estimates the mean response at the given predictor values."
                 ),
                 DT::DTOutput("mlrConfInterval")
               ),
-
               tabPanel(
                 tagList(icon("search-location"), " Interpolation / Extrapolation"),
                 br(),
-                tags$div(class = "reg-help-alert",
+                tags$div(
+                  class = "reg-help-alert",
                   icon("info-circle"),
                   " Uses leverage values (hᵢᵢ) to detect whether new observations fall\n                  inside (interpolation) or outside (EXTRAPOLATION) the predictor space."
                 ),
@@ -1459,100 +1613,543 @@ ui <- dashboardPage(
       ),
 
       # ========================================================
+      # CHAPTER 9: MULTICOLLINEARITY TAB
+      # ========================================================
+      tabItem(
+        tabName = "ch9multi",
+        tags$div(
+          class = "reg-step-banner",
+          tags$div(class = "step-badge", "1"),
+          tags$div(
+            tags$h4("Quadratic Surface Setup"),
+            tags$p("Select one response and exactly 3 predictors, then fit the full second-order model.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            status = "primary", solidHeader = FALSE,
+            width = 12, style = "padding: 18px;",
+            fluidRow(
+              column(
+                3,
+                tags$div(class = "section-label", "Response Variable (Y)"),
+                uiOutput("ch9YSelect")
+              ),
+              column(
+                6,
+                tags$div(class = "section-label", "Predictors (Select Exactly 3)"),
+                uiOutput("ch9XSelect")
+              ),
+              column(
+                3,
+                tags$div(class = "section-label", "Run"),
+                actionButton("runCh9", tagList(icon("play"), " Run Analysis"),
+                  class = "fit-btn"
+                ),
+                br(), br(),
+                if (!has_glmnet()) {
+                  tags$span(
+                    style = "color:#b91c1c;font-weight:600;",
+                    "Optional: install 'glmnet' to enable ridge/lasso."
+                  )
+                }
+              )
+            )
+          )
+        ),
+        tags$div(
+          class = "reg-step-banner info",
+          tags$div(class = "step-badge", "2"),
+          tags$div(
+            tags$h4("Original Data Model and VIF"),
+            tags$p("Full quadratic model using original predictors with multicollinearity diagnostics.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Full Model Summary (Original Data)"),
+            solidHeader = TRUE, status = "info", width = 8,
+            verbatimTextOutput("ch9ModelOrig")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("list-ol"), " VIF Values (Original Data)"),
+            solidHeader = TRUE, status = "info", width = 4,
+            DT::DTOutput("ch9VIFOrigTbl")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-bar"), " VIF Chart (Original Data)"),
+            solidHeader = TRUE, status = "info", width = 12,
+            plotOutput("ch9VIFOrigPlot", height = "300px")
+          )
+        ),
+        tags$div(
+          class = "reg-step-banner success",
+          tags$div(class = "step-badge", "3"),
+          tags$div(
+            tags$h4("Centered Predictors Model"),
+            tags$p("Apply centering/scaling, refit the same second-order model, and compare VIF values.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("info-circle"), " Centering Summary"),
+            solidHeader = TRUE, status = "success", width = 4,
+            verbatimTextOutput("ch9CenterInfo")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Full Model Summary (Centered Data)"),
+            solidHeader = TRUE, status = "success", width = 8,
+            verbatimTextOutput("ch9ModelCent")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("list-ol"), " VIF Values (Centered Data)"),
+            solidHeader = TRUE, status = "success", width = 4,
+            DT::DTOutput("ch9VIFCentTbl")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-bar"), " VIF Chart (Centered Data)"),
+            solidHeader = TRUE, status = "success", width = 8,
+            plotOutput("ch9VIFCentPlot", height = "300px")
+          )
+        ),
+        tags$div(
+          class = "reg-step-banner warning",
+          tags$div(class = "step-badge", "4"),
+          tags$div(
+            tags$h4("Ridge and LASSO via Cross-Validation"),
+            tags$p("Cross-validation selects lambda, inspects coefficients, then compares predictions.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Ridge CV Curve"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            plotOutput("ch9RidgeCVPlot", height = "300px")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("calculator"), " Ridge Results"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            DT::DTOutput("ch9RidgeTbl"),
+            br(),
+            htmlOutput("ch9RidgeEq"),
+            br(),
+            tags$h4("Ridge-Adjusted VIF Table", style = "margin:6px 0 10px 0; font-weight:700;"),
+            DT::DTOutput("ch9RidgeVifTbl")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " LASSO CV Curve"),
+            solidHeader = TRUE, status = "danger", width = 6,
+            plotOutput("ch9LassoCVPlot", height = "300px")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("calculator"), " LASSO Results"),
+            solidHeader = TRUE, status = "danger", width = 6,
+            DT::DTOutput("ch9LassoTbl"),
+            br(),
+            htmlOutput("ch9LassoEq"),
+            br(),
+            tags$h4("Post-LASSO VIF Table", style = "margin:6px 0 10px 0; font-weight:700;"),
+            DT::DTOutput("ch9LassoVifTbl")
+          )
+        ),
+        tags$div(
+          style = "background: linear-gradient(135deg,#1f2937,#111827); color:#fff;
+                   border-radius:8px; padding:14px 20px; margin-bottom:18px;
+                   display:flex; align-items:center; gap:14px;
+                   box-shadow:0 2px 8px rgba(0,0,0,.15);",
+          tags$div(class = "step-badge", "5"),
+          tags$div(
+            tags$h4(
+              style = "margin:0;font-size:16px;font-weight:600;",
+              "Predictions and Model Comparison"
+            ),
+            tags$p(
+              style = "margin:2px 0 0;font-size:12px;opacity:.85;",
+              "Enter new X values to compare OLS, Ridge, and LASSO predictions, then inspect CV RMSE."
+            )
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("edit"), " New Predictor Values"),
+            solidHeader = TRUE, status = "primary", width = 12,
+            uiOutput("ch9NewXInputs"),
+            br(),
+            actionButton("runCh9Predict", tagList(icon("magic"), " Predict Models"),
+              class = "predict-btn"
+            )
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Prediction Table"),
+            solidHeader = TRUE, status = "primary", width = 7,
+            DT::DTOutput("ch9PredTable")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-bar"), " CV RMSE Comparison"),
+            solidHeader = TRUE, status = "primary", width = 5,
+            plotOutput("ch9ComparePlot", height = "290px")
+          )
+        )
+      ),
+
+      # ========================================================
+      # CHAPTER 10: MODEL BUILDING TAB
+      # ========================================================
+      tabItem(
+        tabName = "modelbuilding",
+        tags$div(
+          class = "reg-step-banner",
+          tags$div(class = "step-badge", "10"),
+          tags$div(
+            tags$h4("Model Building and Variable Selection"),
+            tags$p("Compare the full model, all possible regressions, and stepwise procedures.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            status = "primary", solidHeader = FALSE,
+            width = 12, style = "padding: 18px;",
+            fluidRow(
+              column(
+                3,
+                tags$div(class = "section-label", "Chapter Example"),
+                actionButton("mbLoadHald", tagList(icon("database"), " Load Hald Cement"),
+                  class = "btn btn-info"
+                ),
+                tags$div(class = "hint-text", "Uses P3_HaldsCement.xlsx from the course files.")
+              ),
+              column(
+                3,
+                tags$div(class = "section-label", "Response Variable (Y)"),
+                uiOutput("mbYSelect")
+              ),
+              column(
+                4,
+                tags$div(class = "section-label", "Candidate Predictors"),
+                uiOutput("mbXSelect")
+              ),
+              column(
+                2,
+                tags$div(class = "section-label", "Run"),
+                actionButton("runMB", tagList(icon("play"), " Build Models"),
+                  class = "fit-btn"
+                )
+              )
+            ),
+            hr(),
+            fluidRow(
+              column(
+                3,
+                numericInput("mbPEnter", "Forward p-enter:", value = 0.10, min = 0.001, max = 0.99, step = 0.01)
+              ),
+              column(
+                3,
+                numericInput("mbPRemove", "Backward p-remove:", value = 0.15, min = 0.001, max = 0.99, step = 0.01)
+              ),
+              column(
+                4,
+                uiOutput("mbFinalXSelect")
+              ),
+              column(
+                2,
+                br(),
+                actionButton("runMBFinal", tagList(icon("check"), " Fit Selected"),
+                  class = "predict-btn"
+                )
+              )
+            )
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner info",
+          tags$div(class = "step-badge", "1"),
+          tags$div(
+            tags$h4("Full Model and Screening"),
+            tags$p("Start from the full model, inspect correlations, and check VIF values.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Full Model Summary"),
+            solidHeader = TRUE, status = "info", width = 7,
+            htmlOutput("mbFullStats"),
+            br(),
+            DT::DTOutput("mbFullCoefTbl")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("calculator"), " ANOVA and VIF"),
+            solidHeader = TRUE, status = "info", width = 5,
+            tabsetPanel(
+              type = "tabs",
+              tabPanel(tagList(icon("calculator"), " ANOVA"), br(), DT::DTOutput("mbFullAnovaTbl")),
+              tabPanel(tagList(icon("shield-alt"), " VIF"), br(), DT::DTOutput("mbFullVifTbl"))
+            )
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("border-all"), " Correlation Matrix"),
+            solidHeader = TRUE, status = "info", width = 6,
+            plotOutput("mbCorrPlot", height = "330px")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-bar"), " VIF Chart"),
+            solidHeader = TRUE, status = "info", width = 6,
+            plotOutput("mbVifPlot", height = "330px")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner success",
+          tags$div(class = "step-badge", "2"),
+          tags$div(
+            tags$h4("All Possible Regressions"),
+            tags$p("Evaluate every candidate subset using adjusted R-squared, MSE, predicted R-squared, Cp, AIC, and BIC.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " All Candidate Models"),
+            solidHeader = TRUE, status = "success", width = 12,
+            DT::DTOutput("mbAllModels")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("award"), " Best Model by Criterion"),
+            solidHeader = TRUE, status = "success", width = 5,
+            DT::DTOutput("mbBestCriteria")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("layer-group"), " Best Model of Each Size"),
+            solidHeader = TRUE, status = "success", width = 7,
+            DT::DTOutput("mbBestBySize")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Mallows Cp Plot"),
+            solidHeader = TRUE, status = "success", width = 6,
+            plotOutput("mbCpPlot", height = "320px")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-area"), " Selection Criteria by Model Size"),
+            solidHeader = TRUE, status = "success", width = 6,
+            plotOutput("mbCriteriaPlot", height = "320px")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner warning",
+          tags$div(class = "step-badge", "3"),
+          tags$div(
+            tags$h4("Forward, Backward, and Stepwise Selection"),
+            tags$p("Run p-value based selection using the same p-enter and p-remove ideas from the chapter.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("arrow-right"), " Forward Selection"),
+            solidHeader = TRUE, status = "warning", width = 4,
+            htmlOutput("mbForwardTrace")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("arrow-left"), " Backward Elimination"),
+            solidHeader = TRUE, status = "warning", width = 4,
+            htmlOutput("mbBackwardTrace")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("exchange-alt"), " Stepwise Selection"),
+            solidHeader = TRUE, status = "warning", width = 4,
+            htmlOutput("mbStepwiseTrace")
+          )
+        ),
+
+        tags$div(
+          style = "background: linear-gradient(135deg,#1f2937,#111827); color:#fff;
+                   border-radius:8px; padding:14px 20px; margin-bottom:18px;
+                   display:flex; align-items:center; gap:14px;
+                   box-shadow:0 2px 8px rgba(0,0,0,.15);",
+          tags$div(class = "step-badge", "4"),
+          tags$div(
+            tags$h4(
+              style = "margin:0;font-size:16px;font-weight:600;",
+              "Final Candidate Model"
+            ),
+            tags$p(
+              style = "margin:2px 0 0;font-size:12px;opacity:.85;",
+              "Fit the selected predictors and inspect the model before using it."
+            )
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("check-circle"), " Selected Model Summary"),
+            solidHeader = TRUE, status = "primary", width = 7,
+            htmlOutput("mbFinalStats"),
+            tabsetPanel(
+              type = "tabs",
+              tabPanel(tagList(icon("list-ol"), " Coefficients"), br(), DT::DTOutput("mbFinalCoefTbl")),
+              tabPanel(tagList(icon("calculator"), " ANOVA"), br(), DT::DTOutput("mbFinalAnovaTbl")),
+              tabPanel(tagList(icon("shield-alt"), " VIF"), br(), DT::DTOutput("mbFinalVifTbl"))
+            )
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("lightbulb"), " Chapter Interpretation"),
+            solidHeader = TRUE, status = "primary", width = 5,
+            htmlOutput("mbInterpretation")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Residual Diagnostics"),
+            solidHeader = TRUE, status = "primary", width = 12,
+            plotOutput("mbFinalDiagnostics", height = "320px")
+          )
+        )
+      ),
+
+      # ========================================================
       # INDICATOR VARIABLE TAB
       # ========================================================
       tabItem(
         tabName = "indicator",
-
-        tags$div(class = "reg-step-banner",
+        tags$div(
+          class = "reg-step-banner",
           tags$div(class = "step-badge", "1"),
           tags$div(
             tags$h4("Indicator (Dummy) Variable Setup"),
             tags$p("Choose Y, one or two qualitative factors, and optionally a numeric X. The app uses k-1 dummy variables per factor.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
             status = "primary", solidHeader = FALSE,
             width = 12, style = "padding: 18px;",
-
             fluidRow(
-              column(4,
+              column(
+                4,
                 tags$div(class = "section-label", "Number of Indicator Factors"),
                 selectInput("indFactorCount", NULL,
-                            choices = c("1 Factor" = "1", "2 Factors" = "2"),
-                            selected = "1")
+                  choices = c("1 Factor" = "1", "2 Factors" = "2"),
+                  selected = "1"
+                )
               ),
-              column(4,
+              column(
+                4,
                 tags$div(class = "section-label", "Response Variable (Y)"),
                 uiOutput("indYSelect")
               ),
               column(4)
             ),
-
             fluidRow(
-              column(6,
+              column(
+                6,
                 tags$div(class = "section-label", "Categorical Variable 1"),
                 uiOutput("indFactorSelect")
               ),
-              column(6,
+              column(
+                6,
                 tags$div(class = "section-label", "Reference Level 1"),
                 uiOutput("indRefSelect")
               )
             ),
-
             conditionalPanel(
               condition = "input.indFactorCount == '2'",
               fluidRow(
-                column(6,
+                column(
+                  6,
                   tags$div(class = "section-label", "Categorical Variable 2"),
                   uiOutput("indFactor2Select")
                 ),
-                column(6,
+                column(
+                  6,
                   tags$div(class = "section-label", "Reference Level 2"),
                   uiOutput("indRef2Select")
                 )
               )
             ),
-
             fluidRow(
-              column(6,
+              column(
+                6,
                 tags$div(class = "section-label", "Numeric Predictor (Optional)"),
                 uiOutput("indXSelect")
               ),
               column(6)
             ),
-
             fluidRow(
-              column(8,
+              column(
+                8,
                 checkboxInput("indInteraction",
                   tagList(icon("random"), " Include interaction with X (non-parallel slopes)"),
-                  value = FALSE),
-                tags$div(class = "hint-text",
+                  value = FALSE
+                ),
+                tags$div(
+                  class = "hint-text",
                   icon("info-circle"),
                   " For 1 factor: X×Factor. For 2 factors: X×Factor1 and X×Factor2."
                 )
               ),
-              column(4,
+              column(
+                4,
                 br(),
                 actionButton("runIndicator",
-                             tagList(icon("play"), " Fit Indicator Model"),
-                             class = "fit-btn")
+                  tagList(icon("play"), " Fit Indicator Model"),
+                  class = "fit-btn"
+                )
               )
             )
           )
         ),
-
-        tags$div(class = "reg-step-banner info",
+        tags$div(
+          class = "reg-step-banner info",
           tags$div(class = "step-badge", "2"),
           tags$div(
             tags$h4("Model Outputs"),
             tags$p("See baseline coding, fitted model summary, ANOVA, and slide-style equation interpretation.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
@@ -1567,7 +2164,6 @@ ui <- dashboardPage(
             verbatimTextOutput("indSummary")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
@@ -1582,7 +2178,6 @@ ui <- dashboardPage(
             verbatimTextOutput("indEquations")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card",
@@ -1604,34 +2199,40 @@ ui <- dashboardPage(
       # ============================================================
       tabItem(
         tabName = "modeladequacy",
-
-        tags$div(class = "reg-step-banner",
+        tags$div(
+          class = "reg-step-banner",
           tags$div(class = "step-badge", icon("stethoscope")),
           tags$div(
             tags$h4("Model Adequacy Checks"),
             tags$p("Select a fitted regression model (SLR or MLR) and click Run Diagnostics.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card", status = "primary", solidHeader = FALSE,
             width = 12, style = "padding:18px;",
             fluidRow(
-              column(4,
+              column(
+                4,
                 tags$div(class = "section-label", "Model Type"),
                 selectInput("maModelType", NULL,
-                  choices = c("Simple Linear Regression (SLR)" = "slr",
-                              "Multiple Linear Regression (MLR)" = "mlr"))
+                  choices = c(
+                    "Simple Linear Regression (SLR)" = "slr",
+                    "Multiple Linear Regression (MLR)" = "mlr"
+                  )
+                )
               ),
-              column(4,
+              column(
+                4,
                 tags$div(class = "section-label", "Predictor(s) hint"),
                 uiOutput("maXHint")
               ),
-              column(4,
+              column(
+                4,
                 br(),
                 actionButton("runMA", tagList(icon("play"), " Run Diagnostics"),
-                             class = "fit-btn")
+                  class = "fit-btn"
+                )
               )
             )
           )
@@ -1649,7 +2250,8 @@ ui <- dashboardPage(
         ),
 
         # Normality
-        tags$div(class = "reg-step-banner info",
+        tags$div(
+          class = "reg-step-banner info",
           tags$div(class = "step-badge", "1"),
           tags$div(
             tags$h4("Normality of Residuals"),
@@ -1657,16 +2259,21 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(class="reg-card", title = tagList(icon("chart-line")," QQ Plots"),
-              solidHeader=TRUE, status="info", width=8,
-              plotOutput("maQQPlot", height="320px")),
-          box(class="reg-card", title = tagList(icon("calculator")," Shapiro-Wilk Test"),
-              solidHeader=TRUE, status="info", width=4,
-              verbatimTextOutput("maShapiro"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " QQ Plots"),
+            solidHeader = TRUE, status = "info", width = 8,
+            plotOutput("maQQPlot", height = "320px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " Shapiro-Wilk Test"),
+            solidHeader = TRUE, status = "info", width = 4,
+            verbatimTextOutput("maShapiro")
+          )
         ),
 
         # Homoscedasticity
-        tags$div(class = "reg-step-banner success",
+        tags$div(
+          class = "reg-step-banner success",
           tags$div(class = "step-badge", "2"),
           tags$div(
             tags$h4("Constant Variance (Homoscedasticity)"),
@@ -1674,16 +2281,21 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(class="reg-card", title = tagList(icon("chart-line")," Residuals vs Fitted"),
-              solidHeader=TRUE, status="success", width=8,
-              plotOutput("maResFitted", height="320px")),
-          box(class="reg-card", title = tagList(icon("calculator")," Breusch-Pagan Test"),
-              solidHeader=TRUE, status="success", width=4,
-              verbatimTextOutput("maBPTest"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " Residuals vs Fitted"),
+            solidHeader = TRUE, status = "success", width = 8,
+            plotOutput("maResFitted", height = "320px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " Breusch-Pagan Test"),
+            solidHeader = TRUE, status = "success", width = 4,
+            verbatimTextOutput("maBPTest")
+          )
         ),
 
         # Independence
-        tags$div(class = "reg-step-banner warning",
+        tags$div(
+          class = "reg-step-banner warning",
           tags$div(class = "step-badge", "3"),
           tags$div(
             tags$h4("Independence of Residuals"),
@@ -1691,46 +2303,59 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
-          box(class="reg-card", title = tagList(icon("chart-line")," Residuals vs Order"),
-              solidHeader=TRUE, status="warning", width=8,
-              plotOutput("maResOrder", height="320px")),
-          box(class="reg-card", title = tagList(icon("calculator")," Durbin-Watson Test"),
-              solidHeader=TRUE, status="warning", width=4,
-              verbatimTextOutput("maDWTest"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " Residuals vs Order"),
+            solidHeader = TRUE, status = "warning", width = 8,
+            plotOutput("maResOrder", height = "320px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " Durbin-Watson Test"),
+            solidHeader = TRUE, status = "warning", width = 4,
+            verbatimTextOutput("maDWTest")
+          )
         ),
 
         # Added-variable plots
         tags$div(
-          style="background:linear-gradient(135deg,#4a148c,#311b92);color:#fff;
+          style = "background:linear-gradient(135deg,#4a148c,#311b92);color:#fff;
                  border-radius:8px;padding:14px 20px;margin-bottom:18px;
                  display:flex;align-items:center;gap:14px;
                  box-shadow:0 2px 8px rgba(0,0,0,.15);",
-          tags$div(class="step-badge", "4"),
+          tags$div(class = "step-badge", "4"),
           tags$div(
-            tags$h4(style="margin:0;font-size:16px;font-weight:600;",
-                    "Added-Variable (Partial Regression) Plots"),
-            tags$p(style="margin:2px 0 0;font-size:12px;opacity:.85;",
-                   "Shows unique contribution of each predictor after accounting for the others.")
+            tags$h4(
+              style = "margin:0;font-size:16px;font-weight:600;",
+              "Added-Variable (Partial Regression) Plots"
+            ),
+            tags$p(
+              style = "margin:2px 0 0;font-size:12px;opacity:.85;",
+              "Shows unique contribution of each predictor after accounting for the others."
+            )
           )
         ),
         fluidRow(
-          box(class="reg-card", title = tagList(icon("chart-bar")," Added-Variable Plots"),
-              solidHeader=TRUE, status="danger", width=12,
-              plotOutput("maAVPlots", height="420px"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-bar"), " Added-Variable Plots"),
+            solidHeader = TRUE, status = "danger", width = 12,
+            plotOutput("maAVPlots", height = "420px")
+          )
         ),
 
         # Lack-of-fit (SLR only)
-        tags$div(class="reg-step-banner",
-          tags$div(class="step-badge", "5"),
+        tags$div(
+          class = "reg-step-banner",
+          tags$div(class = "step-badge", "5"),
           tags$div(
             tags$h4("Lack-of-Fit Test"),
             tags$p("ANOVA pure-error lack-of-fit test (requires replicate X values and EnvStats package).")
           )
         ),
         fluidRow(
-          box(class="reg-card", title = tagList(icon("vial")," Lack-of-Fit Results"),
-              solidHeader=TRUE, status="primary", width=12,
-              verbatimTextOutput("maLackFit"))
+          box(
+            class = "reg-card", title = tagList(icon("vial"), " Lack-of-Fit Results"),
+            solidHeader = TRUE, status = "primary", width = 12,
+            verbatimTextOutput("maLackFit")
+          )
         )
       ),
 
@@ -1739,128 +2364,164 @@ ui <- dashboardPage(
       # ============================================================
       tabItem(
         tabName = "boxtrans",
-
-        tags$div(class = "reg-step-banner",
+        tags$div(
+          class = "reg-step-banner",
           tags$div(class = "step-badge", icon("magic")),
           tags$div(
             tags$h4("Box-Cox & Box-Tidwell Transformations"),
             tags$p("Select Y and a single X variable, then choose the transformation to apply.")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card", status = "primary", solidHeader = FALSE,
             width = 12, style = "padding:18px;",
             fluidRow(
-              column(3,
-                tags$div(class="section-label","Response Variable (Y)"),
+              column(
+                3,
+                tags$div(class = "section-label", "Response Variable (Y)"),
                 uiOutput("btYSelect")
               ),
-              column(3,
-                tags$div(class="section-label","Predictor Variable (X)"),
+              column(
+                3,
+                tags$div(class = "section-label", "Predictor Variable (X)"),
                 uiOutput("btXSelect")
               ),
-              column(3,
-                tags$div(class="section-label","Transformation"),
+              column(
+                3,
+                tags$div(class = "section-label", "Transformation"),
                 selectInput("btMethod", NULL,
-                  choices = c("Box-Cox (transform Y)" = "boxcox",
-                              "Box-Tidwell (transform X)" = "boxtidwell"))
+                  choices = c(
+                    "Box-Cox (transform Y)" = "boxcox",
+                    "Box-Tidwell (transform X)" = "boxtidwell"
+                  )
+                )
               ),
-              column(3,
+              column(
+                3,
                 br(),
-                actionButton("runBT", tagList(icon("play")," Run Transformation"),
-                             class = "fit-btn")
+                actionButton("runBT", tagList(icon("play"), " Run Transformation"),
+                  class = "fit-btn"
+                )
               )
             )
           )
         ),
 
         # Step 1: Original model
-        tags$div(class="reg-step-banner info",
-          tags$div(class="step-badge","1"),
+        tags$div(
+          class = "reg-step-banner info",
+          tags$div(class = "step-badge", "1"),
           tags$div(
             tags$h4("Original OLS Model"),
             tags$p("Scatter plot, summary, and residuals vs fitted for the untransformed data.")
           )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("chart-line")," Scatter + Fit"),
-              solidHeader=TRUE, status="info", width=6,
-              plotOutput("btOrigScatter", height="280px")),
-          box(class="reg-card", title=tagList(icon("calculator")," OLS Summary"),
-              solidHeader=TRUE, status="info", width=6,
-              verbatimTextOutput("btOrigSummary"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " Scatter + Fit"),
+            solidHeader = TRUE, status = "info", width = 6,
+            plotOutput("btOrigScatter", height = "280px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " OLS Summary"),
+            solidHeader = TRUE, status = "info", width = 6,
+            verbatimTextOutput("btOrigSummary")
+          )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("chart-line")," Residuals vs Fitted (Original)"),
-              solidHeader=TRUE, status="info", width=6,
-              plotOutput("btOrigResid", height="250px")),
-          box(class="reg-card", title=tagList(icon("calculator")," Breusch-Pagan (Original)"),
-              solidHeader=TRUE, status="info", width=6,
-              verbatimTextOutput("btOrigBP"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " Residuals vs Fitted (Original)"),
+            solidHeader = TRUE, status = "info", width = 6,
+            plotOutput("btOrigResid", height = "250px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " Breusch-Pagan (Original)"),
+            solidHeader = TRUE, status = "info", width = 6,
+            verbatimTextOutput("btOrigBP")
+          )
         ),
 
         # Step 2: Transformation details
-        tags$div(class="reg-step-banner success",
-          tags$div(class="step-badge","2"),
+        tags$div(
+          class = "reg-step-banner success",
+          tags$div(class = "step-badge", "2"),
           tags$div(
             tags$h4("Optimal Transformation"),
             tags$p("Box-Cox lambda / Box-Tidwell alpha profile and optimal value.")
           )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("search")," Transformation Profile"),
-              solidHeader=TRUE, status="success", width=7,
-              plotOutput("btLambdaPlot", height="300px")),
-          box(class="reg-card", title=tagList(icon("info-circle")," Optimal Parameter"),
-              solidHeader=TRUE, status="success", width=5,
-              verbatimTextOutput("btOptimal"))
+          box(
+            class = "reg-card", title = tagList(icon("search"), " Transformation Profile"),
+            solidHeader = TRUE, status = "success", width = 7,
+            plotOutput("btLambdaPlot", height = "300px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("info-circle"), " Optimal Parameter"),
+            solidHeader = TRUE, status = "success", width = 5,
+            verbatimTextOutput("btOptimal")
+          )
         ),
 
         # Step 3: Transformed model
-        tags$div(class="reg-step-banner warning",
-          tags$div(class="step-badge","3"),
+        tags$div(
+          class = "reg-step-banner warning",
+          tags$div(class = "step-badge", "3"),
           tags$div(
             tags$h4("Transformed Model"),
             tags$p("Scatter plot and model results using the optimal transformation.")
           )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("chart-line")," Scatter + Fit (Transformed)"),
-              solidHeader=TRUE, status="warning", width=6,
-              plotOutput("btTransScatter", height="280px")),
-          box(class="reg-card", title=tagList(icon("calculator")," Transformed OLS Summary"),
-              solidHeader=TRUE, status="warning", width=6,
-              verbatimTextOutput("btTransSummary"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " Scatter + Fit (Transformed)"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            plotOutput("btTransScatter", height = "280px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " Transformed OLS Summary"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            verbatimTextOutput("btTransSummary")
+          )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("chart-line")," Residuals vs Fitted (Transformed)"),
-              solidHeader=TRUE, status="warning", width=6,
-              plotOutput("btTransResid", height="250px")),
-          box(class="reg-card", title=tagList(icon("calculator")," Breusch-Pagan (Transformed)"),
-              solidHeader=TRUE, status="warning", width=6,
-              verbatimTextOutput("btTransBP"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " Residuals vs Fitted (Transformed)"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            plotOutput("btTransResid", height = "250px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " Breusch-Pagan (Transformed)"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            verbatimTextOutput("btTransBP")
+          )
         ),
 
         # Step 4: Side-by-side comparison
         tags$div(
-          style="background:linear-gradient(135deg,#1a237e,#283593);color:#fff;
+          style = "background:linear-gradient(135deg,#1a237e,#283593);color:#fff;
                  border-radius:8px;padding:14px 20px;margin-bottom:18px;
                  display:flex;align-items:center;gap:14px;
                  box-shadow:0 2px 8px rgba(0,0,0,.15);",
-          tags$div(class="step-badge","4"),
+          tags$div(class = "step-badge", "4"),
           tags$div(
-            tags$h4(style="margin:0;font-size:16px;font-weight:600;",
-                    "Side-by-Side Residual Comparison"),
-            tags$p(style="margin:2px 0 0;font-size:12px;opacity:.85;",
-                   "Compare residual plots before and after transformation.")
+            tags$h4(
+              style = "margin:0;font-size:16px;font-weight:600;",
+              "Side-by-Side Residual Comparison"
+            ),
+            tags$p(
+              style = "margin:2px 0 0;font-size:12px;opacity:.85;",
+              "Compare residual plots before and after transformation."
+            )
           )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("balance-scale")," Residual Comparison"),
-              solidHeader=TRUE, status="danger", width=12,
-              plotOutput("btComparison", height="320px"))
+          box(
+            class = "reg-card", title = tagList(icon("balance-scale"), " Residual Comparison"),
+            solidHeader = TRUE, status = "danger", width = 12,
+            plotOutput("btComparison", height = "320px")
+          )
         )
       ),
 
@@ -1869,109 +2530,137 @@ ui <- dashboardPage(
       # ============================================================
       tabItem(
         tabName = "wls",
-
-        tags$div(class = "reg-step-banner",
+        tags$div(
+          class = "reg-step-banner",
           tags$div(class = "step-badge", icon("balance-scale")),
           tags$div(
             tags$h4("Weighted Least Squares (WLS)"),
             tags$p("Select Y, X, and a weight variable (or let the app estimate weights automatically).")
           )
         ),
-
         fluidRow(
           box(
             class = "reg-card", status = "primary", solidHeader = FALSE,
             width = 12, style = "padding:18px;",
             fluidRow(
-              column(3,
-                tags$div(class="section-label","Response Variable (Y)"),
+              column(
+                3,
+                tags$div(class = "section-label", "Response Variable (Y)"),
                 uiOutput("wlsYSelect")
               ),
-              column(3,
-                tags$div(class="section-label","Predictor Variable (X)"),
+              column(
+                3,
+                tags$div(class = "section-label", "Predictor Variable (X)"),
                 uiOutput("wlsXSelect")
               ),
-              column(3,
-                tags$div(class="section-label","Weight Column (optional)"),
+              column(
+                3,
+                tags$div(class = "section-label", "Weight Column (optional)"),
                 uiOutput("wlsWSelect"),
-                tags$div(class="hint-text",
+                tags$div(
+                  class = "hint-text",
                   icon("info-circle"),
-                  " If no weight column, weights are estimated as 1/|residual| from OLS.")
+                  " If no weight column, weights are estimated as 1/|residual| from OLS."
+                )
               ),
-              column(3,
+              column(
+                3,
                 br(),
-                actionButton("runWLS", tagList(icon("play")," Fit WLS Model"),
-                             class = "fit-btn")
+                actionButton("runWLS", tagList(icon("play"), " Fit WLS Model"),
+                  class = "fit-btn"
+                )
               )
             )
           )
         ),
 
         # Step 1 OLS
-        tags$div(class="reg-step-banner info",
-          tags$div(class="step-badge","1"),
+        tags$div(
+          class = "reg-step-banner info",
+          tags$div(class = "step-badge", "1"),
           tags$div(
             tags$h4("OLS Baseline Model"),
             tags$p("Fit ordinary least squares first to diagnose heteroscedasticity.")
           )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("chart-line")," OLS Scatter + Fit"),
-              solidHeader=TRUE, status="info", width=6,
-              plotOutput("wlsOLSScatter", height="280px")),
-          box(class="reg-card", title=tagList(icon("calculator")," OLS Summary & BP Test"),
-              solidHeader=TRUE, status="info", width=6,
-              verbatimTextOutput("wlsOLSSummary"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " OLS Scatter + Fit"),
+            solidHeader = TRUE, status = "info", width = 6,
+            plotOutput("wlsOLSScatter", height = "280px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " OLS Summary & BP Test"),
+            solidHeader = TRUE, status = "info", width = 6,
+            verbatimTextOutput("wlsOLSSummary")
+          )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("chart-line")," OLS Residuals vs Fitted"),
-              solidHeader=TRUE, status="info", width=12,
-              plotOutput("wlsOLSResid", height="280px"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " OLS Residuals vs Fitted"),
+            solidHeader = TRUE, status = "info", width = 12,
+            plotOutput("wlsOLSResid", height = "280px")
+          )
         ),
 
         # Step 2 WLS
-        tags$div(class="reg-step-banner success",
-          tags$div(class="step-badge","2"),
+        tags$div(
+          class = "reg-step-banner success",
+          tags$div(class = "step-badge", "2"),
           tags$div(
             tags$h4("WLS Model"),
             tags$p("Weighted least squares results and standardised residual plot.")
           )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("chart-line")," WLS Scatter + Fit"),
-              solidHeader=TRUE, status="success", width=6,
-              plotOutput("wlsWLSScatter", height="280px")),
-          box(class="reg-card", title=tagList(icon("calculator")," WLS Summary & BP Test"),
-              solidHeader=TRUE, status="success", width=6,
-              verbatimTextOutput("wlsWLSSummary"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " WLS Scatter + Fit"),
+            solidHeader = TRUE, status = "success", width = 6,
+            plotOutput("wlsWLSScatter", height = "280px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("calculator"), " WLS Summary & BP Test"),
+            solidHeader = TRUE, status = "success", width = 6,
+            verbatimTextOutput("wlsWLSSummary")
+          )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("chart-line")," Weighted Residuals vs Weighted Fitted"),
-              solidHeader=TRUE, status="success", width=12,
-              plotOutput("wlsWLSResid", height="280px"))
+          box(
+            class = "reg-card", title = tagList(icon("chart-line"), " Weighted Residuals vs Weighted Fitted"),
+            solidHeader = TRUE, status = "success", width = 12,
+            plotOutput("wlsWLSResid", height = "280px")
+          )
         ),
 
         # Step 3 Comparison
         tags$div(
-          style="background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff;
+          style = "background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff;
                  border-radius:8px;padding:14px 20px;margin-bottom:18px;
                  display:flex;align-items:center;gap:14px;
                  box-shadow:0 2px 8px rgba(0,0,0,.15);",
-          tags$div(class="step-badge","3"),
+          tags$div(class = "step-badge", "3"),
           tags$div(
-            tags$h4(style="margin:0;font-size:16px;font-weight:600;",
-                    "OLS vs WLS Coefficient Comparison"),
-            tags$p(style="margin:2px 0 0;font-size:12px;opacity:.85;",
-                   "Side-by-side residual plots and coefficient table.")
+            tags$h4(
+              style = "margin:0;font-size:16px;font-weight:600;",
+              "OLS vs WLS Coefficient Comparison"
+            ),
+            tags$p(
+              style = "margin:2px 0 0;font-size:12px;opacity:.85;",
+              "Side-by-side residual plots and coefficient table."
+            )
           )
         ),
         fluidRow(
-          box(class="reg-card", title=tagList(icon("balance-scale")," Residual Comparison"),
-              solidHeader=TRUE, status="danger", width=8,
-              plotOutput("wlsComparison", height="300px")),
-          box(class="reg-card", title=tagList(icon("table")," Coefficient Comparison"),
-              solidHeader=TRUE, status="danger", width=4,
-              verbatimTextOutput("wlsCoefComp"))
+          box(
+            class = "reg-card", title = tagList(icon("balance-scale"), " Residual Comparison"),
+            solidHeader = TRUE, status = "danger", width = 8,
+            plotOutput("wlsComparison", height = "300px")
+          ),
+          box(
+            class = "reg-card", title = tagList(icon("table"), " Coefficient Comparison"),
+            solidHeader = TRUE, status = "danger", width = 4,
+            verbatimTextOutput("wlsCoefComp")
+          )
         )
       )
     )
@@ -1980,7 +2669,6 @@ ui <- dashboardPage(
 
 # Server Logic
 server <- function(input, output, session) {
-  
   # Increase maximum file upload size to 50MB (default is 5MB)
   options(shiny.maxRequestSize = 50 * 1024^2)
 
@@ -1990,9 +2678,13 @@ server <- function(input, output, session) {
 
   # Remove rows containing outliers in any numeric variable (IQR rule)
   remove_outliers_iqr <- function(df, k = 1.5) {
-    if (is.null(df) || nrow(df) == 0) return(df)
+    if (is.null(df) || nrow(df) == 0) {
+      return(df)
+    }
     num_cols <- names(df)[sapply(df, is.numeric)]
-    if (length(num_cols) == 0) return(df)
+    if (length(num_cols) == 0) {
+      return(df)
+    }
 
     keep <- rep(TRUE, nrow(df))
     for (col in num_cols) {
@@ -2029,7 +2721,9 @@ server <- function(input, output, session) {
   }
 
   preprocess_cars <- function(df) {
-    if (is.null(df)) return(df)
+    if (is.null(df)) {
+      return(df)
+    }
     df <- as.data.frame(df, stringsAsFactors = FALSE, check.names = FALSE)
 
     inr_to_sar <- 0.0404
@@ -2078,44 +2772,51 @@ server <- function(input, output, session) {
 
   # Default dataset (loaded automatically at startup)
   default_data_path <- "data/P2_DeliveryTime.xlsx"
-  default_data <- tryCatch({
-    ext0 <- tolower(tools::file_ext(default_data_path))
-    df_default <- if (ext0 %in% c("xlsx", "xls")) {
-      as.data.frame(read_excel(default_data_path), check.names = FALSE)
-    } else {
-      read.csv(default_data_path, stringsAsFactors = FALSE, check.names = FALSE)
+  default_data <- tryCatch(
+    {
+      ext0 <- tolower(tools::file_ext(default_data_path))
+      df_default <- if (ext0 %in% c("xlsx", "xls")) {
+        as.data.frame(read_excel(default_data_path), check.names = FALSE)
+      } else {
+        read.csv(default_data_path, stringsAsFactors = FALSE, check.names = FALSE)
+      }
+      preprocess_cars(df_default)
+    },
+    error = function(e) {
+      # Safe fallback if the default file is not accessible
+      fallback <- data.frame(
+        fuel_efficiency_mpg = mtcars$mpg,
+        engine_displacement = mtcars$disp,
+        gross_horsepower = mtcars$hp,
+        rear_axle_ratio = mtcars$drat,
+        vehicle_weight_1000lb = mtcars$wt,
+        quarter_mile_time_sec = mtcars$qsec,
+        engine_cylinders = factor(mtcars$cyl,
+          levels = c(4, 6, 8),
+          labels = c("4 cylinders", "6 cylinders", "8 cylinders")
+        ),
+        engine_shape = factor(mtcars$vs,
+          levels = c(0, 1),
+          labels = c("V-shaped", "Straight")
+        ),
+        transmission_type = factor(mtcars$am,
+          levels = c(0, 1),
+          labels = c("Automatic", "Manual")
+        ),
+        forward_gears = factor(mtcars$gear),
+        carburetors_count = factor(mtcars$carb),
+        mpg_category = cut(mtcars$mpg,
+          breaks = quantile(mtcars$mpg, probs = c(0, 1 / 3, 2 / 3, 1), na.rm = TRUE),
+          include.lowest = TRUE,
+          labels = c("Low", "Medium", "High")
+        )
+      )
+      fallback
     }
-    preprocess_cars(df_default)
-  }, error = function(e) {
-    # Safe fallback if the default file is not accessible
-    fallback <- data.frame(
-      fuel_efficiency_mpg = mtcars$mpg,
-      engine_displacement = mtcars$disp,
-      gross_horsepower = mtcars$hp,
-      rear_axle_ratio = mtcars$drat,
-      vehicle_weight_1000lb = mtcars$wt,
-      quarter_mile_time_sec = mtcars$qsec,
-      engine_cylinders = factor(mtcars$cyl,
-                                levels = c(4, 6, 8),
-                                labels = c("4 cylinders", "6 cylinders", "8 cylinders")),
-      engine_shape = factor(mtcars$vs,
-                            levels = c(0, 1),
-                            labels = c("V-shaped", "Straight")),
-      transmission_type = factor(mtcars$am,
-                                 levels = c(0, 1),
-                                 labels = c("Automatic", "Manual")),
-      forward_gears = factor(mtcars$gear),
-      carburetors_count = factor(mtcars$carb),
-      mpg_category = cut(mtcars$mpg,
-                         breaks = quantile(mtcars$mpg, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE),
-                         include.lowest = TRUE,
-                         labels = c("Low", "Medium", "High"))
-    )
-    fallback
-  })
+  )
 
   default_data <- apply_cleaning_pipeline(default_data, missing_mode = "keep", outlier_mode = "remove")
-  
+
   # Reactive data storage
   data <- reactiveValues(
     raw_base = default_data,
@@ -2124,56 +2825,61 @@ server <- function(input, output, session) {
     numeric_vars = names(default_data)[sapply(default_data, is.numeric)],
     categorical_vars = names(default_data)[!sapply(default_data, is.numeric)]
   )
-  
+
   # File upload handler
   observeEvent(input$datafile, {
     req(input$datafile)
-    
-    tryCatch({
-      ext <- tools::file_ext(input$datafile$name)
-      
-      if(ext == "csv") {
-        uploaded <- read.csv(input$datafile$datapath, stringsAsFactors = FALSE, check.names = FALSE)
-      } else if(ext %in% c("xlsx", "xls")) {
-        uploaded <- as.data.frame(read_excel(input$datafile$datapath), check.names = FALSE)
-      }
 
-      uploaded <- preprocess_cars(uploaded)
-      data$raw_base <- uploaded
-      before_n <- nrow(uploaded)
-      data$raw <- apply_cleaning_pipeline(uploaded,
-                                          missing_mode = input$cleanMissing %||% "keep",
-                                          outlier_mode = input$cleanOutliers %||% "remove",
-                                          log_vars = input$cleanLogVars %||% NULL)
-      removed_n <- before_n - nrow(data$raw)
-      refresh_var_types(data$raw)
-      
-      data$analyzed <- FALSE
-      
-      showNotification(paste("Data uploaded successfully! Variable types detected. Outliers removed:", removed_n), 
-                      type = "message", duration = 3)
-      
-    }, error = function(e) {
-      showNotification(paste("Error reading file:", e$message), 
-                      type = "error", duration = 5)
-    })
+    tryCatch(
+      {
+        ext <- tools::file_ext(input$datafile$name)
+
+        if (ext == "csv") {
+          uploaded <- read.csv(input$datafile$datapath, stringsAsFactors = FALSE, check.names = FALSE)
+        } else if (ext %in% c("xlsx", "xls")) {
+          uploaded <- as.data.frame(read_excel(input$datafile$datapath), check.names = FALSE)
+        }
+
+        uploaded <- preprocess_cars(uploaded)
+        data$raw_base <- uploaded
+        before_n <- nrow(uploaded)
+        data$raw <- apply_cleaning_pipeline(uploaded,
+          missing_mode = input$cleanMissing %||% "keep",
+          outlier_mode = input$cleanOutliers %||% "remove",
+          log_vars = input$cleanLogVars %||% NULL
+        )
+        removed_n <- before_n - nrow(data$raw)
+        refresh_var_types(data$raw)
+
+        data$analyzed <- TRUE
+
+        showNotification(paste("Data uploaded successfully! Variable types detected. Outliers removed:", removed_n),
+          type = "message", duration = 3
+        )
+      },
+      error = function(e) {
+        showNotification(paste("Error reading file:", e$message),
+          type = "error", duration = 5
+        )
+      }
+    )
   })
-  
+
   # Display detected variables
   output$numericVars <- renderPrint({
     req(data$numeric_vars)
     cat(paste(data$numeric_vars, collapse = "\n"))
   })
-  
+
   output$categoricalVars <- renderPrint({
     req(data$categorical_vars)
-    if(length(data$categorical_vars) > 0) {
+    if (length(data$categorical_vars) > 0) {
       cat(paste(data$categorical_vars, collapse = "\n"))
     } else {
       cat("No categorical variables detected")
     }
   })
-  
+
   # Info boxes
   output$rowCountBox <- renderInfoBox({
     infoBox(
@@ -2183,7 +2889,7 @@ server <- function(input, output, session) {
       color = "blue"
     )
   })
-  
+
   output$colCountBox <- renderInfoBox({
     infoBox(
       "Total Variables",
@@ -2192,7 +2898,7 @@ server <- function(input, output, session) {
       color = "green"
     )
   })
-  
+
   output$statusBox <- renderInfoBox({
     infoBox(
       "Status",
@@ -2203,49 +2909,55 @@ server <- function(input, output, session) {
   })
 
   output$kpiRows <- renderInfoBox({
-    infoBox("Rows", ifelse(is.null(data$raw), 0, format(nrow(data$raw), big.mark=",")),
-            icon = icon("table"), color = "blue", fill = TRUE)
+    infoBox("Rows", ifelse(is.null(data$raw), 0, format(nrow(data$raw), big.mark = ",")),
+      icon = icon("table"), color = "blue", fill = TRUE
+    )
   })
   output$kpiCols <- renderInfoBox({
     infoBox("Columns", ifelse(is.null(data$raw), 0, ncol(data$raw)),
-            icon = icon("columns"), color = "teal", fill = TRUE)
+      icon = icon("columns"), color = "teal", fill = TRUE
+    )
   })
   output$kpiMissing <- renderInfoBox({
     miss <- if (is.null(data$raw)) 0 else sum(is.na(data$raw))
     miss_pct <- if (is.null(data$raw)) 0 else round(100 * miss / max(1, nrow(data$raw) * ncol(data$raw)), 2)
     infoBox("Missing %", paste0(miss_pct, "%"),
-            subtitle = paste("Total:", format(miss, big.mark=",")),
-            icon = icon("exclamation-triangle"), color = "yellow", fill = TRUE)
+      subtitle = paste("Total:", format(miss, big.mark = ",")),
+      icon = icon("exclamation-triangle"), color = "yellow", fill = TRUE
+    )
   })
   output$kpiTypes <- renderInfoBox({
     infoBox("Numeric | Categorical",
-            paste(length(data$numeric_vars), "|", length(data$categorical_vars)),
-            icon = icon("layer-group"), color = "green", fill = TRUE)
+      paste(length(data$numeric_vars), "|", length(data$categorical_vars)),
+      icon = icon("layer-group"), color = "green", fill = TRUE
+    )
   })
-  
+
   # Data preview
   output$dataPreview <- renderDT({
     req(data$raw)
     datatable(data$raw,
-              filter = "top",
-              extensions = c("Buttons", "FixedHeader"),
-              options = list(
-                pageLength = 15,
-                scrollX = TRUE,
-                scrollY = "450px",
-                fixedHeader = TRUE,
-                dom = "Bfrtip",
-                buttons = c("copy", "csv", "excel")
-              ))
+      filter = "top",
+      extensions = c("Buttons", "FixedHeader"),
+      options = list(
+        pageLength = 15,
+        scrollX = TRUE,
+        scrollY = "450px",
+        fixedHeader = TRUE,
+        dom = "Bfrtip",
+        buttons = c("copy", "csv", "excel")
+      )
+    )
   })
-  
+
   # Data summary (formatted tables instead of raw R output)
   output$dataSummaryNumeric <- DT::renderDT({
     req(data$raw)
     num_vars <- names(data$raw)[sapply(data$raw, is.numeric)]
     if (length(num_vars) == 0) {
       return(DT::datatable(data.frame(Message = "No numeric variables."),
-                           options = list(dom = "t"), rownames = FALSE))
+        options = list(dom = "t"), rownames = FALSE
+      ))
     }
     dnum <- data$raw[, num_vars, drop = FALSE]
     tbl <- data.frame(
@@ -2260,8 +2972,9 @@ server <- function(input, output, session) {
       Missing = sapply(dnum, function(x) sum(is.na(x)))
     )
     DT::datatable(tbl,
-                  options = list(pageLength = 8, scrollX = TRUE),
-                  rownames = FALSE)
+      options = list(pageLength = 8, scrollX = TRUE),
+      rownames = FALSE
+    )
   })
 
   output$dataSummaryCategorical <- DT::renderDT({
@@ -2269,7 +2982,8 @@ server <- function(input, output, session) {
     cat_vars <- names(data$raw)[!sapply(data$raw, is.numeric)]
     if (length(cat_vars) == 0) {
       return(DT::datatable(data.frame(Message = "No categorical variables."),
-                           options = list(dom = "t"), rownames = FALSE))
+        options = list(dom = "t"), rownames = FALSE
+      ))
     }
     tbl <- data.frame(
       Variable = cat_vars,
@@ -2277,76 +2991,81 @@ server <- function(input, output, session) {
       Most_Frequent = sapply(cat_vars, function(v) {
         x <- as.character(data$raw[[v]])
         x <- x[!is.na(x) & trimws(x) != ""]
-        if (length(x) == 0) return("N/A")
+        if (length(x) == 0) {
+          return("N/A")
+        }
         names(sort(table(x), decreasing = TRUE))[1]
       }),
       Missing = sapply(cat_vars, function(v) sum(is.na(data$raw[[v]]) | trimws(as.character(data$raw[[v]])) == "")),
       stringsAsFactors = FALSE
     )
     DT::datatable(tbl,
-                  options = list(pageLength = 8, scrollX = TRUE),
-                  rownames = FALSE)
+      options = list(pageLength = 8, scrollX = TRUE),
+      rownames = FALSE
+    )
   })
-  
+
   # Analyze button
   observeEvent(input$analyzeBtn, {
     req(data$raw)
     data$analyzed <- TRUE
     showNotification("Data ready for analysis!", type = "message", duration = 3)
   })
-  
+
   # ===== SINGLE VARIABLE ANALYSIS =====
-  
+
   output$singleVarSelect <- renderUI({
     req(data$raw)
-    
-    if(input$singleVarType == "Numerical") {
+
+    if (input$singleVarType == "Numerical") {
       selectInput("singleVar", "Select Variable:", choices = data$numeric_vars)
     } else {
       selectInput("singleVar", "Select Variable:", choices = data$categorical_vars)
     }
   })
-  
+
   observeEvent(input$runSingleAnalysis, {
     req(data$raw, input$singleVar)
-    
-    if(input$singleVarType == "Numerical") {
+
+    if (input$singleVarType == "Numerical") {
       var_data <- data$raw[[input$singleVar]]
-      
+
       output$singleStats <- renderPrint({
         cat("Descriptive Statistics for", input$singleVar, "\n")
         cat(strrep("=", 50), "\n\n")
         cat("Central Tendency:\n")
         cat("  Mean   :", round(mean(var_data, na.rm = TRUE), 3), "\n")
         cat("  Median :", round(median(var_data, na.rm = TRUE), 3), "\n")
-        cat("  Mode   :", names(sort(table(var_data), decreasing=TRUE)[1]), "\n\n")
-        
+        cat("  Mode   :", names(sort(table(var_data), decreasing = TRUE)[1]), "\n\n")
+
         cat("Dispersion:\n")
         cat("  Range      :", round(max(var_data, na.rm = TRUE) - min(var_data, na.rm = TRUE), 3), "\n")
         cat("  Variance   :", round(var(var_data, na.rm = TRUE), 3), "\n")
         cat("  Std Dev    :", round(sd(var_data, na.rm = TRUE), 3), "\n")
         cat("  IQR        :", round(IQR(var_data, na.rm = TRUE), 3), "\n\n")
-        
+
         cat("Shape:\n")
         cat("  Skewness   :", round(skewness(var_data, na.rm = TRUE), 3), "\n")
         cat("  Kurtosis   :", round(kurtosis(var_data, na.rm = TRUE), 3), "\n")
       })
-      
+
       output$singlePlot <- renderPlot({
         par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
-        
-        hist(var_data, 
-             freq = TRUE, 
-             main = paste("Histogram of", input$singleVar), 
-             col = "lightblue",
-             xlab = input$singleVar,
-             border = "darkblue")
-        
+
+        hist(var_data,
+          freq = TRUE,
+          main = paste("Histogram of", input$singleVar),
+          col = "lightblue",
+          xlab = input$singleVar,
+          border = "darkblue"
+        )
+
         boxplot(var_data,
-                main = paste("Boxplot of", input$singleVar),
-                xlab = input$singleVar,
-                col = "lightgreen",
-                horizontal = TRUE)
+          main = paste("Boxplot of", input$singleVar),
+          xlab = input$singleVar,
+          col = "lightgreen",
+          horizontal = TRUE
+        )
       })
       if (HAS_PLOTLY) {
         output$singlePlotly <- plotly::renderPlotly({
@@ -2357,12 +3076,11 @@ server <- function(input, output, session) {
           plotly::subplot(p1, p2, nrows = 2, shareX = FALSE, titleY = TRUE)
         })
       }
-      
     } else {
       var_data <- data$raw[[input$singleVar]]
       freq_table <- table(var_data)
       prop_table <- prop.table(freq_table)
-      
+
       output$singleStats <- renderPrint({
         cat("Frequency Distribution for", input$singleVar, "\n")
         cat(strrep("=", 50), "\n\n")
@@ -2373,20 +3091,22 @@ server <- function(input, output, session) {
         cat("\n\nMode:", names(which.max(freq_table)), "\n")
         cat("Modal Frequency:", max(freq_table), "\n")
       })
-      
+
       output$singlePlot <- renderPlot({
         par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
-        
+
         barplot(freq_table,
-                main = paste("Bar Plot of", input$singleVar),
-                xlab = input$singleVar,
-                ylab = "Frequency",
-                col = brewer.pal(min(length(freq_table), 8), "Set2"),
-                las = 2)
-        
+          main = paste("Bar Plot of", input$singleVar),
+          xlab = input$singleVar,
+          ylab = "Frequency",
+          col = brewer.pal(min(length(freq_table), 8), "Set2"),
+          las = 2
+        )
+
         pie(freq_table,
-            main = paste("Pie Chart of", input$singleVar),
-            col = brewer.pal(min(length(freq_table), 8), "Pastel1"))
+          main = paste("Pie Chart of", input$singleVar),
+          col = brewer.pal(min(length(freq_table), 8), "Pastel1")
+        )
       })
       if (HAS_PLOTLY) {
         output$singlePlotly <- plotly::renderPlotly({
@@ -2400,7 +3120,7 @@ server <- function(input, output, session) {
       }
     }
   })
-  
+
   # ===== MULTI-VARIABLE ANALYSIS (2+) =====
 
   output$multiVarRows <- renderUI({
@@ -2410,7 +3130,7 @@ server <- function(input, output, session) {
 
     rows <- lapply(seq_len(n_vars), function(i) {
       type_id <- paste0("multiVarType", i)
-      var_id  <- paste0("multiVar", i)
+      var_id <- paste0("multiVar", i)
 
       type_val <- as.character(input[[type_id]] %||% "Numerical")
       choices <- if (identical(type_val, "Categorical")) data$categorical_vars else data$numeric_vars
@@ -2422,15 +3142,19 @@ server <- function(input, output, session) {
 
       fluidRow(
         column(2, tags$strong(paste("Variable", i))),
-        column(4,
+        column(
+          4,
           selectInput(type_id, NULL,
-                      choices = c("Numerical", "Categorical"),
-                      selected = type_val, width = "100%")
+            choices = c("Numerical", "Categorical"),
+            selected = type_val, width = "100%"
+          )
         ),
-        column(6,
+        column(
+          6,
           selectInput(var_id, NULL,
-                      choices = choices,
-                      selected = selected_val, width = "100%")
+            choices = choices,
+            selected = selected_val, width = "100%"
+          )
         )
       )
     })
@@ -2464,224 +3188,254 @@ server <- function(input, output, session) {
 
       num_vars <- selected_vars[selected_types == "Numerical"]
       cat_vars <- selected_vars[selected_types == "Categorical"]
-      df_sel   <- data$raw[, unique(selected_vars), drop = FALSE]
+      df_sel <- data$raw[, unique(selected_vars), drop = FALSE]
       incProgress(0.35)
 
-    output$twoVarStats <- renderPrint({
-      cat("Multi-Variable Analysis\n")
-      cat(strrep("=", 55), "\n\n")
-      cat("Selected variables:\n")
-      for (i in seq_len(n_vars)) {
-        cat(sprintf("  %d) %-30s [%s]\n", i, selected_vars[i], selected_types[i]))
-      }
-
-      if (length(num_vars) >= 2) {
-        cat("\n\nNumerical Block: Correlation Matrix\n")
-        cat(strrep("-", 55), "\n")
-        corr_mat <- cor(df_sel[, num_vars, drop = FALSE], use = "complete.obs")
-        print(round(corr_mat, 4))
-      }
-
-      if (length(cat_vars) >= 2) {
-        cat("\n\nCategorical Block: Pairwise Chi-Square Tests\n")
-        cat(strrep("-", 55), "\n")
-        for (i in 1:(length(cat_vars) - 1)) {
-          for (j in (i + 1):length(cat_vars)) {
-            t_ij <- table(df_sel[[cat_vars[i]]], df_sel[[cat_vars[j]]])
-            cat("\n", cat_vars[i], "vs", cat_vars[j], "\n")
-            tryCatch({
-              ch <- chisq.test(t_ij)
-              cat("  Chi-square:", round(ch$statistic, 4),
-                  " df:", ch$parameter,
-                  " p-value:", format.pval(ch$p.value, digits = 4), "\n")
-            }, error = function(e) {
-              cat("  Test could not be computed:", e$message, "\n")
-            })
-          }
+      output$twoVarStats <- renderPrint({
+        cat("Multi-Variable Analysis\n")
+        cat(strrep("=", 55), "\n\n")
+        cat("Selected variables:\n")
+        for (i in seq_len(n_vars)) {
+          cat(sprintf("  %d) %-30s [%s]\n", i, selected_vars[i], selected_types[i]))
         }
-      }
 
-      if (length(num_vars) >= 1 && length(cat_vars) >= 1) {
-        cat("\n\nMixed Block: Group Mean Comparisons (ANOVA)\n")
-        cat(strrep("-", 55), "\n")
-        for (nv in num_vars) {
-          for (cv in cat_vars) {
-            cat("\n", nv, "by", cv, "\n")
-            tmp <- data.frame(y = df_sel[[nv]], g = as.factor(df_sel[[cv]]))
-            tmp <- tmp[complete.cases(tmp), , drop = FALSE]
-            if (nlevels(tmp$g) < 2 || nrow(tmp) < 3) {
-              cat("  Not enough valid groups/data for ANOVA.\n")
-            } else {
-              aov_out <- summary(aov(y ~ g, data = tmp))
-              print(aov_out)
+        if (length(num_vars) >= 2) {
+          cat("\n\nNumerical Block: Correlation Matrix\n")
+          cat(strrep("-", 55), "\n")
+          corr_mat <- cor(df_sel[, num_vars, drop = FALSE], use = "complete.obs")
+          print(round(corr_mat, 4))
+        }
+
+        if (length(cat_vars) >= 2) {
+          cat("\n\nCategorical Block: Pairwise Chi-Square Tests\n")
+          cat(strrep("-", 55), "\n")
+          for (i in 1:(length(cat_vars) - 1)) {
+            for (j in (i + 1):length(cat_vars)) {
+              t_ij <- table(df_sel[[cat_vars[i]]], df_sel[[cat_vars[j]]])
+              cat("\n", cat_vars[i], "vs", cat_vars[j], "\n")
+              tryCatch(
+                {
+                  ch <- chisq.test(t_ij)
+                  cat(
+                    "  Chi-square:", round(ch$statistic, 4),
+                    " df:", ch$parameter,
+                    " p-value:", format.pval(ch$p.value, digits = 4), "\n"
+                  )
+                },
+                error = function(e) {
+                  cat("  Test could not be computed:", e$message, "\n")
+                }
+              )
             }
           }
         }
-      }
-    })
 
-      output$twoVarPlot <- renderPlot({
-      if (length(num_vars) >= 3) {
-        pairs(df_sel[, num_vars, drop = FALSE],
-              main = "Scatter Plot Matrix (Numerical Variables)",
-              pch = 19, col = rgb(0.2, 0.5, 0.8, 0.5), cex = 0.7)
-      } else if (length(num_vars) == 2) {
-        x <- df_sel[[num_vars[1]]]
-        y <- df_sel[[num_vars[2]]]
-        plot(x, y,
-             main = paste(num_vars[1], "vs", num_vars[2]),
-             xlab = num_vars[1], ylab = num_vars[2],
-             pch = 19, col = rgb(0.2, 0.5, 0.8, 0.5))
-        abline(lm(y ~ x), col = "red", lwd = 2)
-      } else if (length(num_vars) == 1 && length(cat_vars) >= 1) {
-        g <- as.factor(df_sel[[cat_vars[1]]])
-        boxplot(df_sel[[num_vars[1]]] ~ g,
-                main = paste(num_vars[1], "by", cat_vars[1]),
-                xlab = cat_vars[1], ylab = num_vars[1],
-                col = brewer.pal(min(length(levels(g)), 8), "Set2"),
-                las = 2)
-      } else if (length(cat_vars) >= 2) {
-        t12 <- table(df_sel[[cat_vars[1]]], df_sel[[cat_vars[2]]])
-        barplot(t12,
-                main = paste(cat_vars[1], "vs", cat_vars[2]),
-                xlab = cat_vars[2], ylab = "Frequency",
-                col = brewer.pal(min(nrow(t12), 8), "Set3"),
-                beside = TRUE, legend.text = TRUE)
-      } else {
-        plot.new()
-        text(0.5, 0.5, "Not enough valid variables selected for plotting.", cex = 1.1)
-      }
-    })
-    if (HAS_PLOTLY) {
-      output$twoVarPlotly <- plotly::renderPlotly({
-        if (length(num_vars) >= 2) {
-          x <- df_sel[[num_vars[1]]]
-          y <- df_sel[[num_vars[2]]]
-          plotly::plot_ly(x = x, y = y, type = "scatter", mode = "markers",
-                          marker = list(color = "#3b82f6", opacity = 0.65)) |>
-            plotly::layout(title = paste(num_vars[1], "vs", num_vars[2]),
-                           xaxis = list(title = num_vars[1]),
-                           yaxis = list(title = num_vars[2]))
-        } else if (length(num_vars) == 1 && length(cat_vars) >= 1) {
-          plotly::plot_ly(x = as.factor(df_sel[[cat_vars[1]]]),
-                          y = df_sel[[num_vars[1]]], type = "box")
-        } else if (length(cat_vars) >= 2) {
-          t12 <- as.data.frame(table(df_sel[[cat_vars[1]]], df_sel[[cat_vars[2]]]))
-          names(t12) <- c("Var1", "Var2", "Freq")
-          plotly::plot_ly(t12, x = ~Var2, y = ~Freq, color = ~Var1, type = "bar")
-        } else {
-          plotly::plot_ly()
+        if (length(num_vars) >= 1 && length(cat_vars) >= 1) {
+          cat("\n\nMixed Block: Group Mean Comparisons (ANOVA)\n")
+          cat(strrep("-", 55), "\n")
+          for (nv in num_vars) {
+            for (cv in cat_vars) {
+              cat("\n", nv, "by", cv, "\n")
+              tmp <- data.frame(y = df_sel[[nv]], g = as.factor(df_sel[[cv]]))
+              tmp <- tmp[complete.cases(tmp), , drop = FALSE]
+              if (nlevels(tmp$g) < 2 || nrow(tmp) < 3) {
+                cat("  Not enough valid groups/data for ANOVA.\n")
+              } else {
+                aov_out <- summary(aov(y ~ g, data = tmp))
+                print(aov_out)
+              }
+            }
+          }
         }
       })
-    }
+
+      output$twoVarPlot <- renderPlot({
+        if (length(num_vars) >= 3) {
+          pairs(df_sel[, num_vars, drop = FALSE],
+            main = "Scatter Plot Matrix (Numerical Variables)",
+            pch = 19, col = rgb(0.2, 0.5, 0.8, 0.5), cex = 0.7
+          )
+        } else if (length(num_vars) == 2) {
+          x <- df_sel[[num_vars[1]]]
+          y <- df_sel[[num_vars[2]]]
+          plot(x, y,
+            main = paste(num_vars[1], "vs", num_vars[2]),
+            xlab = num_vars[1], ylab = num_vars[2],
+            pch = 19, col = rgb(0.2, 0.5, 0.8, 0.5)
+          )
+          abline(lm(y ~ x), col = "red", lwd = 2)
+        } else if (length(num_vars) == 1 && length(cat_vars) >= 1) {
+          g <- as.factor(df_sel[[cat_vars[1]]])
+          boxplot(df_sel[[num_vars[1]]] ~ g,
+            main = paste(num_vars[1], "by", cat_vars[1]),
+            xlab = cat_vars[1], ylab = num_vars[1],
+            col = brewer.pal(min(length(levels(g)), 8), "Set2"),
+            las = 2
+          )
+        } else if (length(cat_vars) >= 2) {
+          t12 <- table(df_sel[[cat_vars[1]]], df_sel[[cat_vars[2]]])
+          barplot(t12,
+            main = paste(cat_vars[1], "vs", cat_vars[2]),
+            xlab = cat_vars[2], ylab = "Frequency",
+            col = brewer.pal(min(nrow(t12), 8), "Set3"),
+            beside = TRUE, legend.text = TRUE
+          )
+        } else {
+          plot.new()
+          text(0.5, 0.5, "Not enough valid variables selected for plotting.", cex = 1.1)
+        }
+      })
+      if (HAS_PLOTLY) {
+        output$twoVarPlotly <- plotly::renderPlotly({
+          if (length(num_vars) >= 2) {
+            x <- df_sel[[num_vars[1]]]
+            y <- df_sel[[num_vars[2]]]
+            plotly::plot_ly(
+              x = x, y = y, type = "scatter", mode = "markers",
+              marker = list(color = "#3b82f6", opacity = 0.65)
+            ) |>
+              plotly::layout(
+                title = paste(num_vars[1], "vs", num_vars[2]),
+                xaxis = list(title = num_vars[1]),
+                yaxis = list(title = num_vars[2])
+              )
+          } else if (length(num_vars) == 1 && length(cat_vars) >= 1) {
+            plotly::plot_ly(
+              x = as.factor(df_sel[[cat_vars[1]]]),
+              y = df_sel[[num_vars[1]]], type = "box"
+            )
+          } else if (length(cat_vars) >= 2) {
+            t12 <- as.data.frame(table(df_sel[[cat_vars[1]]], df_sel[[cat_vars[2]]]))
+            names(t12) <- c("Var1", "Var2", "Freq")
+            plotly::plot_ly(t12, x = ~Var2, y = ~Freq, color = ~Var1, type = "bar")
+          } else {
+            plotly::plot_ly()
+          }
+        })
+      }
       incProgress(0.40)
     })
   })
-  
+
   # ===== CORRELATION MATRIX =====
-  
+
   output$corrVarsSelect <- renderUI({
     req(data$numeric_vars)
     selectInput("corrVars", "Select Variables (multiple):",
-               choices = data$numeric_vars,
-               multiple = TRUE,
-               selected = data$numeric_vars[1:min(3, length(data$numeric_vars))])
+      choices = data$numeric_vars,
+      multiple = TRUE,
+      selected = data$numeric_vars[1:min(3, length(data$numeric_vars))]
+    )
   })
-  
+
   observeEvent(input$runCorrAnalysis, {
     req(data$raw, input$corrVars)
     withProgress(message = "Computing correlation outputs...", value = 0, {
-    
-    selected_data <- data$raw[, input$corrVars, drop = FALSE]
-    corr_matrix <- cor(selected_data, use = "complete.obs")
-    incProgress(0.4)
-    
-    output$corrMatrix <- renderPrint({
-      cat("Correlation Matrix\n")
-      cat(strrep("=", 40), "\n\n")
-      print(round(corr_matrix, 3))
-    })
-    
-    output$corrHeatmap <- renderPlot({
-      corrplot(corr_matrix, 
-               method = "circle",
-               addCoef.col = "black",
-               type = "upper",
-               diag = FALSE,
-               col = COL2('RdYlBu', n=20),
-               tl.cex = 0.9,
-               tl.col = "black",
-               number.cex = 0.8)
-    })
-    
-    output$corrPairs <- renderPlot({
-      pairs(selected_data,
-            main = "Scatter Plot Matrix",
-            pch = 19,
-            col = rgb(0.2, 0.5, 0.8, 0.4),
-            cex = 0.6)
-    })
-    incProgress(0.6)
+      selected_data <- data$raw[, input$corrVars, drop = FALSE]
+      corr_matrix <- cor(selected_data, use = "complete.obs")
+      incProgress(0.4)
+
+      output$corrMatrix <- renderPrint({
+        cat("Correlation Matrix\n")
+        cat(strrep("=", 40), "\n\n")
+        print(round(corr_matrix, 3))
+      })
+
+      output$corrHeatmap <- renderPlot({
+        corrplot(corr_matrix,
+          method = "circle",
+          addCoef.col = "black",
+          type = "upper",
+          diag = FALSE,
+          col = COL2("RdYlBu", n = 20),
+          tl.cex = 0.9,
+          tl.col = "black",
+          number.cex = 0.8
+        )
+      })
+
+      output$corrPairs <- renderPlot({
+        pairs(selected_data,
+          main = "Scatter Plot Matrix",
+          pch = 19,
+          col = rgb(0.2, 0.5, 0.8, 0.4),
+          cex = 0.6
+        )
+      })
+      incProgress(0.6)
     })
   })
-  
+
   # ===== CATEGORICAL ANALYSIS =====
-  
+
   output$catVarSelect <- renderUI({
     req(data$categorical_vars)
     selectInput("catVar", "Select Categorical Variable:",
-               choices = data$categorical_vars)
+      choices = data$categorical_vars
+    )
   })
-  
+
   observeEvent(input$runCatAnalysis, {
     req(data$raw, input$catVar)
-    
+
     cat_data <- data$raw[[input$catVar]]
     freq_table <- table(cat_data)
     prop_table <- prop.table(freq_table)
-    
-    output$catFrequency <- renderTable({
-      data.frame(
-        Category = names(freq_table),
-        Frequency = as.numeric(freq_table)
-      )
-    }, rownames = FALSE)
-    
-    output$catProportion <- renderTable({
-      data.frame(
-        Category = names(prop_table),
-        Proportion = round(as.numeric(prop_table), 4),
-        Percentage = paste0(round(as.numeric(prop_table) * 100, 2), "%")
-      )
-    }, rownames = FALSE)
-    
+
+    output$catFrequency <- renderTable(
+      {
+        data.frame(
+          Category = names(freq_table),
+          Frequency = as.numeric(freq_table)
+        )
+      },
+      rownames = FALSE
+    )
+
+    output$catProportion <- renderTable(
+      {
+        data.frame(
+          Category = names(prop_table),
+          Proportion = round(as.numeric(prop_table), 4),
+          Percentage = paste0(round(as.numeric(prop_table) * 100, 2), "%")
+        )
+      },
+      rownames = FALSE
+    )
+
     output$catPlot <- renderPlot({
-      if(input$catPlotType == "Bar Plot") {
+      if (input$catPlotType == "Bar Plot") {
         par(mfrow = c(1, 1))
         barplot(freq_table,
-                main = paste("Bar Plot of", input$catVar),
-                xlab = input$catVar,
-                ylab = "Frequency",
-                col = brewer.pal(min(length(freq_table), 8), "Set2"),
-                las = 2)
-      } else if(input$catPlotType == "Pie Chart") {
+          main = paste("Bar Plot of", input$catVar),
+          xlab = input$catVar,
+          ylab = "Frequency",
+          col = brewer.pal(min(length(freq_table), 8), "Set2"),
+          las = 2
+        )
+      } else if (input$catPlotType == "Pie Chart") {
         par(mfrow = c(1, 1))
         pie(freq_table,
-            main = paste("Pie Chart of", input$catVar),
-            col = brewer.pal(min(length(freq_table), 8), "Pastel1"),
-            labels = paste(names(freq_table), "\n(", 
-                          round(prop_table*100, 1), "%)", sep = ""))
+          main = paste("Pie Chart of", input$catVar),
+          col = brewer.pal(min(length(freq_table), 8), "Pastel1"),
+          labels = paste(names(freq_table), "\n(",
+            round(prop_table * 100, 1), "%)",
+            sep = ""
+          )
+        )
       } else {
         par(mfrow = c(2, 1), mar = c(5, 4, 3, 2))
         barplot(freq_table,
-                main = paste("Bar Plot of", input$catVar),
-                xlab = input$catVar,
-                ylab = "Frequency",
-                col = brewer.pal(min(length(freq_table), 8), "Set2"),
-                las = 2)
+          main = paste("Bar Plot of", input$catVar),
+          xlab = input$catVar,
+          ylab = "Frequency",
+          col = brewer.pal(min(length(freq_table), 8), "Set2"),
+          las = 2
+        )
         pie(freq_table,
-            main = paste("Pie Chart of", input$catVar),
-            col = brewer.pal(min(length(freq_table), 8), "Pastel1"))
+          main = paste("Pie Chart of", input$catVar),
+          col = brewer.pal(min(length(freq_table), 8), "Pastel1")
+        )
       }
     })
     if (HAS_PLOTLY) {
@@ -2690,129 +3444,147 @@ server <- function(input, output, session) {
         if (input$catPlotType == "Pie Chart") {
           plotly::plot_ly(dfp, labels = ~Category, values = ~Frequency, type = "pie")
         } else {
-          plotly::plot_ly(dfp, x = ~Category, y = ~Frequency, type = "bar",
-                          marker = list(color = "#60a5fa"))
+          plotly::plot_ly(dfp,
+            x = ~Category, y = ~Frequency, type = "bar",
+            marker = list(color = "#60a5fa")
+          )
         }
       })
     }
   })
-  
+
   # ===== CROSS-TABULATION =====
-  
+
   output$crosstabVar1Select <- renderUI({
     req(data$categorical_vars)
     selectInput("crosstabVar1", "Row Variable:",
-               choices = data$categorical_vars)
+      choices = data$categorical_vars
+    )
   })
-  
+
   output$crosstabVar2Select <- renderUI({
     req(data$categorical_vars)
     selectInput("crosstabVar2", "Column Variable:",
-               choices = data$categorical_vars)
+      choices = data$categorical_vars
+    )
   })
-  
+
   observeEvent(input$runCrosstabAnalysis, {
     req(data$raw, input$crosstabVar1, input$crosstabVar2)
-    
+
     var1_data <- data$raw[[input$crosstabVar1]]
     var2_data <- data$raw[[input$crosstabVar2]]
-    
+
     cont_table <- table(var1_data, var2_data)
     joint_prop <- prop.table(cont_table)
-    
-    output$crosstabTable <- renderTable({
-      as.data.frame.matrix(cont_table)
-    }, rownames = TRUE)
-    
-    output$crosstabProp <- renderTable({
-      as.data.frame.matrix(round(joint_prop, 4))
-    }, rownames = TRUE)
-    
+
+    output$crosstabTable <- renderTable(
+      {
+        as.data.frame.matrix(cont_table)
+      },
+      rownames = TRUE
+    )
+
+    output$crosstabProp <- renderTable(
+      {
+        as.data.frame.matrix(round(joint_prop, 4))
+      },
+      rownames = TRUE
+    )
+
     output$chiSquareTest <- renderPrint({
       chi_test <- chisq.test(cont_table)
       cat("Chi-Square Test of Independence\n")
       cat(strrep("=", 40), "\n\n")
       print(chi_test)
-      
+
       cat("\n\nCramér's V:\n")
       cramers_v <- sqrt(chi_test$statistic / (sum(cont_table) * (min(dim(cont_table)) - 1)))
       cat(sprintf("%.4f\n", cramers_v))
     })
-    
+
     output$crosstabPlot <- renderPlot({
-      if(input$crosstabPlotType == "Stacked Bar") {
+      if (input$crosstabPlotType == "Stacked Bar") {
         barplot(cont_table,
-                main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
-                xlab = input$crosstabVar2,
-                col = brewer.pal(min(nrow(cont_table), 8), "Set3"),
-                legend.text = TRUE)
-      } else if(input$crosstabPlotType == "Grouped Bar") {
+          main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
+          xlab = input$crosstabVar2,
+          col = brewer.pal(min(nrow(cont_table), 8), "Set3"),
+          legend.text = TRUE
+        )
+      } else if (input$crosstabPlotType == "Grouped Bar") {
         barplot(cont_table,
-                main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
-                xlab = input$crosstabVar2,
-                col = brewer.pal(min(nrow(cont_table), 8), "Set3"),
-                beside = TRUE,
-                legend.text = TRUE)
+          main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
+          xlab = input$crosstabVar2,
+          col = brewer.pal(min(nrow(cont_table), 8), "Set3"),
+          beside = TRUE,
+          legend.text = TRUE
+        )
       } else {
         mosaicplot(cont_table,
-                   main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
-                   color = brewer.pal(min(ncol(cont_table), 8), "Set2"))
+          main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
+          color = brewer.pal(min(ncol(cont_table), 8), "Set2")
+        )
       }
     })
   })
-  
+
   # ===== MULTI-CATEGORICAL ANALYSIS (3+ VARIABLES) =====
-  
+
   # Variable selectors for multi-categorical
   output$multiCatVar1Select <- renderUI({
     req(data$categorical_vars)
     selectInput("multiCatVar1", "Variable 1:",
-               choices = c("Select...", data$categorical_vars),
-               selected = "Select...")
+      choices = c("Select...", data$categorical_vars),
+      selected = "Select..."
+    )
   })
-  
+
   output$multiCatVar2Select <- renderUI({
     req(data$categorical_vars)
     selectInput("multiCatVar2", "Variable 2:",
-               choices = c("Select...", data$categorical_vars),
-               selected = "Select...")
+      choices = c("Select...", data$categorical_vars),
+      selected = "Select..."
+    )
   })
-  
+
   output$multiCatVar3Select <- renderUI({
     req(data$categorical_vars)
     selectInput("multiCatVar3", "Variable 3:",
-               choices = c("Select...", data$categorical_vars),
-               selected = "Select...")
+      choices = c("Select...", data$categorical_vars),
+      selected = "Select..."
+    )
   })
-  
+
   output$multiCatVar4Select <- renderUI({
     req(data$categorical_vars)
     selectInput("multiCatVar4", "Variable 4 (Optional):",
-               choices = c("None", data$categorical_vars),
-               selected = "None")
+      choices = c("None", data$categorical_vars),
+      selected = "None"
+    )
   })
-  
+
   # Multi-categorical analysis
   observeEvent(input$runMultiCatAnalysis, {
     req(data$raw, input$multiCatVar1, input$multiCatVar2, input$multiCatVar3)
-    
+
     # Collect selected variables (excluding "Select..." and "None")
     selected_vars <- c(input$multiCatVar1, input$multiCatVar2, input$multiCatVar3)
-    if(!is.null(input$multiCatVar4) && input$multiCatVar4 != "None") {
+    if (!is.null(input$multiCatVar4) && input$multiCatVar4 != "None") {
       selected_vars <- c(selected_vars, input$multiCatVar4)
     }
     selected_vars <- selected_vars[selected_vars != "Select..."]
-    
-    if(length(selected_vars) < 3) {
-      showNotification("Please select at least 3 categorical variables!", 
-                      type = "error", duration = 5)
+
+    if (length(selected_vars) < 3) {
+      showNotification("Please select at least 3 categorical variables!",
+        type = "error", duration = 5
+      )
       return()
     }
-    
+
     # Create multi-way table
     multi_data <- data$raw[, selected_vars, drop = FALSE]
     multi_table <- table(multi_data)
-    
+
     # Multi-way contingency table output
     output$multiCatTable <- renderPrint({
       cat("Multi-Way Contingency Table\n")
@@ -2821,214 +3593,243 @@ server <- function(input, output, session) {
       cat("Dimensions:", paste(dim(multi_table), collapse = " x "), "\n\n")
       print(multi_table)
     })
-    
+
     # Conditional proportions
     output$multiCatProportions <- renderPrint({
       cat("Proportions (relative to total)\n")
       cat(strrep("=", 60), "\n\n")
       prop_table <- prop.table(multi_table)
       print(round(prop_table, 4))
-      
+
       cat("\n\nConditional Proportions (by", selected_vars[1], ")\n")
       cat(strrep("-", 60), "\n")
       cond_prop <- prop.table(multi_table, 1)
       print(round(cond_prop, 4))
     })
-    
+
     # Chi-square test
     output$multiCatChiSquare <- renderPrint({
       cat("Multi-Way Chi-Square Test\n")
       cat(strrep("=", 40), "\n\n")
-      
+
       # Flatten to 2D for chi-square test
-      if(length(selected_vars) == 3) {
+      if (length(selected_vars) == 3) {
         # Create formula
         formula_str <- paste(selected_vars[3], "~", selected_vars[1], "+", selected_vars[2])
         test_table <- xtabs(as.formula(formula_str), data = multi_data)
-        
-        tryCatch({
-          chi_test <- chisq.test(test_table)
-          print(chi_test)
-          
-          cat("\n\nInterpretation:\n")
-          if(chi_test$p.value < 0.05) {
-            cat("Result: SIGNIFICANT association (p < 0.05)\n")
-            cat("Conclusion: The variables are NOT independent.\n")
-          } else {
-            cat("Result: NO significant association (p >= 0.05)\n")
-            cat("Conclusion: The variables appear to be independent.\n")
+
+        tryCatch(
+          {
+            chi_test <- chisq.test(test_table)
+            print(chi_test)
+
+            cat("\n\nInterpretation:\n")
+            if (chi_test$p.value < 0.05) {
+              cat("Result: SIGNIFICANT association (p < 0.05)\n")
+              cat("Conclusion: The variables are NOT independent.\n")
+            } else {
+              cat("Result: NO significant association (p >= 0.05)\n")
+              cat("Conclusion: The variables appear to be independent.\n")
+            }
+          },
+          error = function(e) {
+            cat("Chi-square test could not be computed.\n")
+            cat("This may be due to small expected frequencies.\n")
+            cat("Error:", e$message, "\n")
           }
-        }, error = function(e) {
-          cat("Chi-square test could not be computed.\n")
-          cat("This may be due to small expected frequencies.\n")
-          cat("Error:", e$message, "\n")
-        })
+        )
       } else {
         cat("Note: For 4+ variables, pairwise testing is performed.\n\n")
-        
-        for(i in 1:(length(selected_vars)-1)) {
-          for(j in (i+1):length(selected_vars)) {
+
+        for (i in 1:(length(selected_vars) - 1)) {
+          for (j in (i + 1):length(selected_vars)) {
             cat("\nTesting:", selected_vars[i], "vs", selected_vars[j], "\n")
             cat(strrep("-", 40), "\n")
-            test_table <- table(multi_data[[selected_vars[i]]], 
-                              multi_data[[selected_vars[j]]])
-            tryCatch({
-              chi_test <- chisq.test(test_table)
-              cat("Chi-square =", round(chi_test$statistic, 3), 
-                 ", df =", chi_test$parameter,
-                 ", p-value =", format.pval(chi_test$p.value, digits = 4), "\n")
-            }, error = function(e) {
-              cat("Test failed: small expected frequencies\n")
-            })
+            test_table <- table(
+              multi_data[[selected_vars[i]]],
+              multi_data[[selected_vars[j]]]
+            )
+            tryCatch(
+              {
+                chi_test <- chisq.test(test_table)
+                cat(
+                  "Chi-square =", round(chi_test$statistic, 3),
+                  ", df =", chi_test$parameter,
+                  ", p-value =", format.pval(chi_test$p.value, digits = 4), "\n"
+                )
+              },
+              error = function(e) {
+                cat("Test failed: small expected frequencies\n")
+              }
+            )
           }
         }
       }
     })
-    
+
     # Association measures
     output$multiCatAssociation <- renderPrint({
       cat("Association Strength Measures\n")
       cat(strrep("=", 40), "\n\n")
-      
+
       # Calculate Cramér's V for all pairs
-      for(i in 1:(length(selected_vars)-1)) {
-        for(j in (i+1):length(selected_vars)) {
-          test_table <- table(multi_data[[selected_vars[i]]], 
-                            multi_data[[selected_vars[j]]])
-          
-          tryCatch({
-            chi_test <- chisq.test(test_table)
-            n <- sum(test_table)
-            min_dim <- min(dim(test_table)) - 1
-            cramers_v <- sqrt(chi_test$statistic / (n * min_dim))
-            
-            cat(selected_vars[i], "vs", selected_vars[j], ":\n")
-            cat("  Cramér's V =", round(cramers_v, 4))
-            
-            if(cramers_v < 0.1) {
-              cat(" (Negligible)\n")
-            } else if(cramers_v < 0.3) {
-              cat(" (Weak)\n")
-            } else if(cramers_v < 0.5) {
-              cat(" (Moderate)\n")
-            } else {
-              cat(" (Strong)\n")
+      for (i in 1:(length(selected_vars) - 1)) {
+        for (j in (i + 1):length(selected_vars)) {
+          test_table <- table(
+            multi_data[[selected_vars[i]]],
+            multi_data[[selected_vars[j]]]
+          )
+
+          tryCatch(
+            {
+              chi_test <- chisq.test(test_table)
+              n <- sum(test_table)
+              min_dim <- min(dim(test_table)) - 1
+              cramers_v <- sqrt(chi_test$statistic / (n * min_dim))
+
+              cat(selected_vars[i], "vs", selected_vars[j], ":\n")
+              cat("  Cramér's V =", round(cramers_v, 4))
+
+              if (cramers_v < 0.1) {
+                cat(" (Negligible)\n")
+              } else if (cramers_v < 0.3) {
+                cat(" (Weak)\n")
+              } else if (cramers_v < 0.5) {
+                cat(" (Moderate)\n")
+              } else {
+                cat(" (Strong)\n")
+              }
+            },
+            error = function(e) {
+              cat(selected_vars[i], "vs", selected_vars[j], ": Unable to compute\n")
             }
-          }, error = function(e) {
-            cat(selected_vars[i], "vs", selected_vars[j], ": Unable to compute\n")
-          })
+          )
         }
       }
     })
-    
+
     # Visualization options
     output$multiCatPlotOptions <- renderUI({
-      if(input$multiCatPlotType == "Heatmap") {
+      if (input$multiCatPlotType == "Heatmap") {
         selectInput("heatmapVars", "Select 2 variables for heatmap:",
-                   choices = selected_vars,
-                   multiple = TRUE,
-                   selected = selected_vars[1:2])
+          choices = selected_vars,
+          multiple = TRUE,
+          selected = selected_vars[1:2]
+        )
       } else {
         NULL
       }
     })
-    
+
     # Multi-way visualization
     output$multiCatPlot <- renderPlot({
       req(multi_table)
-      
-      if(input$multiCatPlotType == "Grouped Bar Chart") {
+
+      if (input$multiCatPlotType == "Grouped Bar Chart") {
         # Grouped bar chart
-        if(length(selected_vars) == 3) {
+        if (length(selected_vars) == 3) {
           counts <- as.data.frame(multi_table)
           names(counts)[length(names(counts))] <- "Freq"
-          
+
           par(mar = c(8, 4, 3, 2))
-          
+
           # Create interaction variable
-          interaction_var <- interaction(counts[[selected_vars[2]]], 
-                                        counts[[selected_vars[3]]])
-          
+          interaction_var <- interaction(
+            counts[[selected_vars[2]]],
+            counts[[selected_vars[3]]]
+          )
+
           barplot(counts$Freq,
-                  main = paste("Multi-Way Distribution"),
-                  xlab = "",
-                  ylab = "Frequency",
-                  col = rep(brewer.pal(min(8, length(unique(counts[[selected_vars[2]]]))), "Set3"),
-                           length.out = nrow(counts)),
-                  las = 2,
-                  names.arg = paste(counts[[selected_vars[1]]], 
-                                  counts[[selected_vars[2]]],
-                                  counts[[selected_vars[3]]], sep = "\n"))
+            main = paste("Multi-Way Distribution"),
+            xlab = "",
+            ylab = "Frequency",
+            col = rep(brewer.pal(min(8, length(unique(counts[[selected_vars[2]]]))), "Set3"),
+              length.out = nrow(counts)
+            ),
+            las = 2,
+            names.arg = paste(counts[[selected_vars[1]]],
+              counts[[selected_vars[2]]],
+              counts[[selected_vars[3]]],
+              sep = "\n"
+            )
+          )
         } else {
           plot.new()
           text(0.5, 0.5, "Grouped bar chart works best with 3 variables.\nTry another visualization type.", cex = 1.5)
         }
-        
-      } else if(input$multiCatPlotType == "Faceted Bar Chart") {
+      } else if (input$multiCatPlotType == "Faceted Bar Chart") {
         # Faceted visualization
-        if(length(selected_vars) >= 3) {
+        if (length(selected_vars) >= 3) {
           par(mfrow = c(2, 2), mar = c(5, 4, 3, 2))
-          
+
           # Create different facets
           unique_vals <- unique(multi_data[[selected_vars[1]]])
-          
-          for(val in unique_vals[1:min(4, length(unique_vals))]) {
+
+          for (val in unique_vals[1:min(4, length(unique_vals))]) {
             subset_data <- multi_data[multi_data[[selected_vars[1]]] == val, ]
-            subset_table <- table(subset_data[[selected_vars[2]]], 
-                                subset_data[[selected_vars[3]]])
-            
+            subset_table <- table(
+              subset_data[[selected_vars[2]]],
+              subset_data[[selected_vars[3]]]
+            )
+
             barplot(subset_table,
-                    main = paste(selected_vars[1], "=", val),
-                    xlab = selected_vars[3],
-                    ylab = "Frequency",
-                    col = brewer.pal(min(nrow(subset_table), 8), "Pastel1"),
-                    beside = TRUE,
-                    legend.text = TRUE,
-                    args.legend = list(x = "topright", cex = 0.7))
+              main = paste(selected_vars[1], "=", val),
+              xlab = selected_vars[3],
+              ylab = "Frequency",
+              col = brewer.pal(min(nrow(subset_table), 8), "Pastel1"),
+              beside = TRUE,
+              legend.text = TRUE,
+              args.legend = list(x = "topright", cex = 0.7)
+            )
           }
         }
-        
-      } else if(input$multiCatPlotType == "Mosaic Plot") {
+      } else if (input$multiCatPlotType == "Mosaic Plot") {
         # Mosaic plot
-        if(length(selected_vars) == 3) {
+        if (length(selected_vars) == 3) {
           formula_str <- paste("~", paste(selected_vars, collapse = " + "))
-          mosaicplot(as.formula(formula_str), data = multi_data,
-                    main = "Multi-Way Mosaic Plot",
-                    color = brewer.pal(8, "Set2"))
+          mosaicplot(as.formula(formula_str),
+            data = multi_data,
+            main = "Multi-Way Mosaic Plot",
+            color = brewer.pal(8, "Set2")
+          )
         } else {
           # For 4 variables, show first 3
           formula_str <- paste("~", paste(selected_vars[1:3], collapse = " + "))
-          mosaicplot(as.formula(formula_str), data = multi_data,
-                    main = paste("Mosaic Plot:", paste(selected_vars[1:3], collapse = ", ")),
-                    color = brewer.pal(8, "Set2"))
+          mosaicplot(as.formula(formula_str),
+            data = multi_data,
+            main = paste("Mosaic Plot:", paste(selected_vars[1:3], collapse = ", ")),
+            color = brewer.pal(8, "Set2")
+          )
         }
-        
-      } else if(input$multiCatPlotType == "Heatmap") {
+      } else if (input$multiCatPlotType == "Heatmap") {
         # Heatmap for frequency counts
-        if(!is.null(input$heatmapVars) && length(input$heatmapVars) == 2) {
-          heat_table <- table(multi_data[[input$heatmapVars[1]]], 
-                            multi_data[[input$heatmapVars[2]]])
-          
+        if (!is.null(input$heatmapVars) && length(input$heatmapVars) == 2) {
+          heat_table <- table(
+            multi_data[[input$heatmapVars[1]]],
+            multi_data[[input$heatmapVars[2]]]
+          )
+
           # Convert to matrix
           heat_matrix <- as.matrix(heat_table)
-          
+
           # Create color palette
           colors <- colorRampPalette(c("white", "#FFF9C4", "#FF9800", "#F44336"))(20)
-          
+
           # Plot heatmap
           image(1:ncol(heat_matrix), 1:nrow(heat_matrix), t(heat_matrix),
-                col = colors,
-                xlab = input$heatmapVars[2],
-                ylab = input$heatmapVars[1],
-                main = "Frequency Heatmap",
-                axes = FALSE)
-          
+            col = colors,
+            xlab = input$heatmapVars[2],
+            ylab = input$heatmapVars[1],
+            main = "Frequency Heatmap",
+            axes = FALSE
+          )
+
           axis(1, at = 1:ncol(heat_matrix), labels = colnames(heat_matrix), las = 2)
           axis(2, at = 1:nrow(heat_matrix), labels = rownames(heat_matrix), las = 2)
-          
+
           # Add frequency values
-          for(i in 1:nrow(heat_matrix)) {
-            for(j in 1:ncol(heat_matrix)) {
+          for (i in 1:nrow(heat_matrix)) {
+            for (j in 1:ncol(heat_matrix)) {
               text(j, i, heat_matrix[i, j], cex = 1.2)
             }
           }
@@ -3038,33 +3839,35 @@ server <- function(input, output, session) {
         }
       }
     })
-    
+
     # Insights
     output$multiCatInsights <- renderUI({
       insights <- list()
-      
+
       # Total combinations
       total_combos <- prod(dim(multi_table))
       observed_combos <- sum(multi_table > 0)
-      
+
       insights <- c(insights, paste0(
         "<li><strong>Sparsity:</strong> ", observed_combos, " out of ", total_combos,
         " possible combinations are observed (",
         round(100 * observed_combos / total_combos, 1), "%).</li>"
       ))
-      
+
       # Most common pattern
       flat_table <- as.data.frame(multi_table)
       most_common_idx <- which.max(flat_table$Freq)
       most_common <- flat_table[most_common_idx, ]
-      
+
       insights <- c(insights, paste0(
         "<li><strong>Most Common Pattern:</strong> ",
-        paste(names(most_common)[1:(length(names(most_common))-1)], 
-             "=", most_common[1:(length(most_common)-1)], collapse = ", "),
+        paste(names(most_common)[1:(length(names(most_common)) - 1)],
+          "=", most_common[1:(length(most_common) - 1)],
+          collapse = ", "
+        ),
         " with ", most_common$Freq, " occurrences.</li>"
       ))
-      
+
       # Recommendations
       recommendations <- paste0(
         "<h4><i class='fa fa-lightbulb'></i> Recommendations:</h4>",
@@ -3074,45 +3877,47 @@ server <- function(input, output, session) {
         "<li>Check chi-square test results for statistical significance</li>",
         "</ul>"
       )
-      
+
       HTML(paste0(
         '<div style="background-color: #FFF3E0; padding: 15px; border-radius: 5px; border-left: 4px solid #FF9800;">',
         '<h4><i class="fa fa-info-circle"></i> Analysis Insights:</h4>',
-        '<ul>',
+        "<ul>",
         paste(insights, collapse = "\n"),
-        '</ul>',
-        '</div>',
-        '<br>',
+        "</ul>",
+        "</div>",
+        "<br>",
         '<div style="background-color: #E8F5E9; padding: 15px; border-radius: 5px; border-left: 4px solid #4CAF50;">',
         recommendations,
-        '</div>'
+        "</div>"
       ))
     })
   })
-  
+
   # ===== HYPOTHESIS TESTS =====
-  
+
   output$testVarInputs <- renderUI({
     req(data$raw)
-    
-    if(input$testType %in% c("One-Sample T-Test", "One-Sample Wilcoxon Test", "Normality Test (Shapiro-Wilk)")) {
+
+    if (input$testType %in% c("One-Sample T-Test", "One-Sample Wilcoxon Test", "Normality Test (Shapiro-Wilk)")) {
       tagList(
         selectInput("testVar1", "Select Variable:", choices = data$numeric_vars),
         numericInput("testMu", "Hypothesized Mean (μ₀):", value = 0)
       )
-    } else if(input$testType == "Two-Sample T-Test") {
+    } else if (input$testType == "Two-Sample T-Test") {
       tagList(
-        selectInput("testVar1", "Group Variable (Categorical):", 
-                   choices = data$categorical_vars),
-        selectInput("testVar2", "Measurement Variable (Numerical):", 
-                   choices = data$numeric_vars)
+        selectInput("testVar1", "Group Variable (Categorical):",
+          choices = data$categorical_vars
+        ),
+        selectInput("testVar2", "Measurement Variable (Numerical):",
+          choices = data$numeric_vars
+        )
       )
-    } else if(input$testType == "Paired T-Test") {
+    } else if (input$testType == "Paired T-Test") {
       tagList(
         selectInput("testVar1", "Variable 1:", choices = data$numeric_vars),
         selectInput("testVar2", "Variable 2:", choices = data$numeric_vars)
       )
-    } else if(input$testType == "One-Way ANOVA (F-Test)") {
+    } else if (input$testType == "One-Way ANOVA (F-Test)") {
       tagList(
         selectInput("testVar1", "Group Variable (Categorical):", choices = data$categorical_vars),
         selectInput("testVar2", "Measurement Variable (Numerical):", choices = data$numeric_vars)
@@ -3124,58 +3929,58 @@ server <- function(input, output, session) {
       )
     }
   })
-  
+
   observeEvent(input$runHypothesisTest, {
     req(data$raw, input$testVar1)
-    
-    if(input$testType == "One-Sample T-Test") {
+
+    if (input$testType == "One-Sample T-Test") {
       test_data <- data$raw[[input$testVar1]]
-      
+
       output$testResults <- renderPrint({
         t_test <- t.test(test_data, mu = input$testMu)
         print(t_test)
       })
-      
+
       output$testPlot <- renderPlot({
         boxplot(test_data,
-                main = "Distribution",
-                ylab = input$testVar1,
-                col = "lightblue")
+          main = "Distribution",
+          ylab = input$testVar1,
+          col = "lightblue"
+        )
         abline(h = input$testMu, col = "red", lwd = 2, lty = 2)
       })
-      
-    } else if(input$testType == "Normality Test (Shapiro-Wilk)") {
+    } else if (input$testType == "Normality Test (Shapiro-Wilk)") {
       test_data <- data$raw[[input$testVar1]]
       sample_size <- min(5000, length(test_data))
-      
+
       output$testResults <- renderPrint({
         shapiro_test <- shapiro.test(sample(test_data, sample_size))
         print(shapiro_test)
       })
-      
+
       output$testPlot <- renderPlot({
         qqnorm(test_data, main = "Q-Q Plot")
         qqline(test_data, col = "red", lwd = 2)
       })
-      
-    } else if(input$testType == "Two-Sample T-Test") {
+    } else if (input$testType == "Two-Sample T-Test") {
       req(input$testVar2)
       group_var <- data$raw[[input$testVar1]]
       measure_var <- data$raw[[input$testVar2]]
-      
+
       output$testResults <- renderPrint({
         t_test <- t.test(measure_var ~ group_var)
         print(t_test)
       })
-      
+
       output$testPlot <- renderPlot({
         boxplot(measure_var ~ group_var,
-                main = "Group Comparison",
-                xlab = input$testVar1,
-                ylab = input$testVar2,
-                col = c("lightblue", "lightgreen"))
+          main = "Group Comparison",
+          xlab = input$testVar1,
+          ylab = input$testVar2,
+          col = c("lightblue", "lightgreen")
+        )
       })
-    } else if(input$testType == "One-Way ANOVA (F-Test)") {
+    } else if (input$testType == "One-Way ANOVA (F-Test)") {
       req(input$testVar2)
       group_var <- as.factor(data$raw[[input$testVar1]])
       measure_var <- data$raw[[input$testVar2]]
@@ -3194,18 +3999,20 @@ server <- function(input, output, session) {
       })
 
       output$testPlot <- renderPlot({
-        boxplot(y ~ g, data = df_test,
-                main = "One-Way ANOVA: Group Comparison",
-                xlab = input$testVar1,
-                ylab = input$testVar2,
-                col = brewer.pal(min(8, nlevels(df_test$g)), "Set2"),
-                las = 2)
+        boxplot(y ~ g,
+          data = df_test,
+          main = "One-Way ANOVA: Group Comparison",
+          xlab = input$testVar1,
+          ylab = input$testVar2,
+          col = brewer.pal(min(8, nlevels(df_test$g)), "Set2"),
+          las = 2
+        )
       })
     }
   })
-  
+
   # ===== SUMMARY REPORT - REDESIGNED =====
-  
+
   # Info Boxes at the top
   output$summaryRows <- renderInfoBox({
     req(data$raw)
@@ -3217,7 +4024,7 @@ server <- function(input, output, session) {
       fill = TRUE
     )
   })
-  
+
   output$summaryColumns <- renderInfoBox({
     req(data$raw)
     infoBox(
@@ -3228,7 +4035,7 @@ server <- function(input, output, session) {
       fill = TRUE
     )
   })
-  
+
   output$summaryNumeric <- renderInfoBox({
     req(data$numeric_vars)
     infoBox(
@@ -3239,7 +4046,7 @@ server <- function(input, output, session) {
       fill = TRUE
     )
   })
-  
+
   output$summaryCategorical <- renderInfoBox({
     req(data$categorical_vars)
     infoBox(
@@ -3250,11 +4057,11 @@ server <- function(input, output, session) {
       fill = TRUE
     )
   })
-  
+
   # Variable Structure Table
   output$variableTable <- renderDT({
     req(data$raw)
-    
+
     var_info <- data.frame(
       Variable = names(data$raw),
       Type = ifelse(names(data$raw) %in% data$numeric_vars, "Numerical", "Categorical"),
@@ -3262,49 +4069,56 @@ server <- function(input, output, session) {
       `Missing %` = round(100 * colSums(is.na(data$raw)) / nrow(data$raw), 2),
       check.names = FALSE
     )
-    
+
     datatable(var_info,
-              options = list(
-                pageLength = 10,
-                scrollY = "250px",
-                dom = 'ftp'
-              ),
-              rownames = FALSE) %>%
-      formatStyle('Type',
-                  backgroundColor = styleEqual(c('Numerical', 'Categorical'), 
-                                              c('#e3f2fd', '#fff3e0')))
+      options = list(
+        pageLength = 10,
+        scrollY = "250px",
+        dom = "ftp"
+      ),
+      rownames = FALSE
+    ) %>%
+      formatStyle("Type",
+        backgroundColor = styleEqual(
+          c("Numerical", "Categorical"),
+          c("#e3f2fd", "#fff3e0")
+        )
+      )
   })
-  
+
   # Variable Type Distribution Plot
   output$variableTypePlot <- renderPlot({
     req(data$raw)
-    
+
     type_counts <- c(
       Numerical = length(data$numeric_vars),
       Categorical = length(data$categorical_vars)
     )
-    
+
     par(mar = c(3, 3, 3, 2))
-    
+
     # Create a nice pie chart
     colors <- c("#42A5F5", "#FFA726")
     pie(type_counts,
-        labels = paste(names(type_counts), "\n", type_counts, 
-                      " (", round(100*type_counts/sum(type_counts), 1), "%)", sep=""),
-        col = colors,
-        main = "Variable Types",
-        cex = 1.2,
-        border = "white",
-        lwd = 2)
+      labels = paste(names(type_counts), "\n", type_counts,
+        " (", round(100 * type_counts / sum(type_counts), 1), "%)",
+        sep = ""
+      ),
+      col = colors,
+      main = "Variable Types",
+      cex = 1.2,
+      border = "white",
+      lwd = 2
+    )
   })
-  
+
   # Numerical Variables Summary Table
   output$numericSummaryTable <- renderDT({
     req(data$raw, data$numeric_vars)
-    
-    if(length(data$numeric_vars) > 0) {
+
+    if (length(data$numeric_vars) > 0) {
       numeric_data <- data$raw[, data$numeric_vars, drop = FALSE]
-      
+
       summary_stats <- data.frame(
         Variable = data$numeric_vars,
         Mean = sapply(numeric_data, function(x) round(mean(x, na.rm = TRUE), 2)),
@@ -3314,124 +4128,131 @@ server <- function(input, output, session) {
         Max = sapply(numeric_data, function(x) round(max(x, na.rm = TRUE), 2)),
         Missing = sapply(numeric_data, function(x) sum(is.na(x)))
       )
-      
+
       datatable(summary_stats,
-                options = list(
-                  pageLength = 10,
-                  scrollX = TRUE,
-                  dom = 'ftp'
-                ),
-                rownames = FALSE) %>%
-        formatStyle(columns = 1:7, fontSize = '14px')
+        options = list(
+          pageLength = 10,
+          scrollX = TRUE,
+          dom = "ftp"
+        ),
+        rownames = FALSE
+      ) %>%
+        formatStyle(columns = 1:7, fontSize = "14px")
     }
   })
-  
+
   # Missing Values Plot (enhanced)
   output$missingPlot <- renderPlot({
     req(data$raw)
-    
+
     missing_counts <- colSums(is.na(data$raw))
     missing_pct <- 100 * missing_counts / nrow(data$raw)
-    
-    if(sum(missing_counts) > 0) {
+
+    if (sum(missing_counts) > 0) {
       # Only show variables with missing values
       missing_vars <- missing_counts[missing_counts > 0]
       missing_pct_filtered <- missing_pct[missing_counts > 0]
-      
+
       par(mar = c(8, 4, 3, 2))
       barplot(missing_pct_filtered,
-              main = "Missing Values by Variable (%)",
-              ylab = "Percentage Missing",
-              col = colorRampPalette(c("#FFF9C4", "#FF5722"))(length(missing_vars)),
-              las = 2,
-              border = NA,
-              ylim = c(0, max(missing_pct_filtered) * 1.2))
-      
+        main = "Missing Values by Variable (%)",
+        ylab = "Percentage Missing",
+        col = colorRampPalette(c("#FFF9C4", "#FF5722"))(length(missing_vars)),
+        las = 2,
+        border = NA,
+        ylim = c(0, max(missing_pct_filtered) * 1.2)
+      )
+
       # Add percentage labels on top
-      text(x = seq_along(missing_vars) * 1.2 - 0.5,
-           y = missing_pct_filtered + max(missing_pct_filtered) * 0.05,
-           labels = paste0(round(missing_pct_filtered, 1), "%"),
-           cex = 0.8)
+      text(
+        x = seq_along(missing_vars) * 1.2 - 0.5,
+        y = missing_pct_filtered + max(missing_pct_filtered) * 0.05,
+        labels = paste0(round(missing_pct_filtered, 1), "%"),
+        cex = 0.8
+      )
     } else {
       plot.new()
       text(0.5, 0.5, "✓ No Missing Values!", cex = 2.5, col = "#4CAF50", font = 2)
       text(0.5, 0.35, "Your data is complete!", cex = 1.5, col = "#666")
     }
   })
-  
+
   output$missingStats <- renderPrint({
     req(data$raw)
-    
+
     missing_counts <- colSums(is.na(data$raw))
     total_cells <- nrow(data$raw) * ncol(data$raw)
     total_missing <- sum(missing_counts)
-    
+
     cat("COMPLETENESS SUMMARY\n")
     cat(strrep("=", 40), "\n\n")
     cat(sprintf("Total cells: %s\n", format(total_cells, big.mark = ",")))
     cat(sprintf("Missing values: %s\n", format(total_missing, big.mark = ",")))
-    cat(sprintf("Completeness: %.2f%%\n", 100 * (1 - total_missing/total_cells)))
-    
-    if(total_missing > 0) {
+    cat(sprintf("Completeness: %.2f%%\n", 100 * (1 - total_missing / total_cells)))
+
+    if (total_missing > 0) {
       cat("\nVariables with missing data:\n")
       cat(strrep("-", 40), "\n")
       missing_vars <- missing_counts[missing_counts > 0]
-      for(var in names(missing_vars)) {
+      for (var in names(missing_vars)) {
         pct <- 100 * missing_vars[var] / nrow(data$raw)
         cat(sprintf("  %-20s: %5d (%.1f%%)\n", var, missing_vars[var], pct))
       }
     }
   })
-  
+
   # Data Completeness Visualization
   output$completenessPlot <- renderPlot({
     req(data$raw)
-    
+
     missing_counts <- colSums(is.na(data$raw))
     completeness <- 100 * (1 - missing_counts / nrow(data$raw))
-    
+
     par(mar = c(8, 4, 3, 2))
-    
+
     # Color code: green for >95%, yellow for 90-95%, orange for 80-90%, red for <80%
     colors <- ifelse(completeness >= 95, "#4CAF50",
-                    ifelse(completeness >= 90, "#FDD835",
-                          ifelse(completeness >= 80, "#FF9800", "#F44336")))
-    
+      ifelse(completeness >= 90, "#FDD835",
+        ifelse(completeness >= 80, "#FF9800", "#F44336")
+      )
+    )
+
     barplot(completeness,
-            main = "Data Completeness by Variable",
-            ylab = "Completeness (%)",
-            col = colors,
-            las = 2,
-            border = NA,
-            ylim = c(0, 105))
-    
+      main = "Data Completeness by Variable",
+      ylab = "Completeness (%)",
+      col = colors,
+      las = 2,
+      border = NA,
+      ylim = c(0, 105)
+    )
+
     abline(h = 95, col = "#4CAF50", lty = 2, lwd = 2)
     abline(h = 90, col = "#FDD835", lty = 2, lwd = 1)
     abline(h = 80, col = "#FF9800", lty = 2, lwd = 1)
   })
-  
+
   # Data Quality Score
   output$dataQualityScore <- renderUI({
     req(data$raw)
-    
+
     missing_counts <- colSums(is.na(data$raw))
     total_cells <- nrow(data$raw) * ncol(data$raw)
     completeness_pct <- 100 * (1 - sum(missing_counts) / total_cells)
-    
+
     # Determine quality rating
-    if(completeness_pct >= 99) {
+    if (completeness_pct >= 99) {
       rating <- "Excellent"
       color <- "#4CAF50"
       icon_name <- "check-circle"
-    } else if(completeness_pct >= 95) {
+    } else if (completeness_pct >= 95) {
       rating <- "Very Good"
       color <- "#8BC34A"
       icon_name <- "check"
-    } else if(completeness_pct >= 90) {
+    } else if (completeness_pct >= 90) {
       rating <- "Good"
       color <- "#FDD835"
       icon_name <- "thumbs-up"
-    } else if(completeness_pct >= 80) {
+    } else if (completeness_pct >= 80) {
       rating <- "Fair"
       color <- "#FF9800"
       icon_name <- "exclamation-triangle"
@@ -3440,148 +4261,159 @@ server <- function(input, output, session) {
       color <- "#F44336"
       icon_name <- "exclamation-circle"
     }
-    
+
     HTML(paste0(
       '<div style="text-align: center; padding: 20px;">',
       '<h2 style="color: ', color, '; margin: 0;">',
       '<i class="fa fa-', icon_name, '"></i> ', rating,
-      '</h2>',
+      "</h2>",
       '<h1 style="font-size: 48px; margin: 10px 0; color: ', color, ';">',
-      round(completeness_pct, 1), '%',
-      '</h1>',
+      round(completeness_pct, 1), "%",
+      "</h1>",
       '<p style="font-size: 16px; color: #666;">Data Completeness Score</p>',
-      '</div>'
+      "</div>"
     ))
   })
-  
+
   # Distribution Select Input
   output$distributionSelect <- renderUI({
     req(data$numeric_vars)
-    
-    if(length(data$numeric_vars) > 0) {
+
+    if (length(data$numeric_vars) > 0) {
       selectInput("distVar", "Select variable to visualize:",
-                 choices = data$numeric_vars,
-                 selected = data$numeric_vars[1])
+        choices = data$numeric_vars,
+        selected = data$numeric_vars[1]
+      )
     } else {
       p("No numerical variables available for distribution analysis.")
     }
   })
-  
+
   # Distribution Plot
   output$distributionPlot <- renderPlot({
     req(data$raw, input$distVar)
-    
+
     var_data <- data$raw[[input$distVar]]
-    
+
     par(mfrow = c(1, 2), mar = c(4, 4, 3, 2))
-    
+
     # Histogram with density
     hist(var_data,
-         freq = FALSE,
-         main = paste("Distribution of", input$distVar),
-         xlab = input$distVar,
-         col = rgb(0.3, 0.5, 0.8, 0.6),
-         border = "white")
-    
+      freq = FALSE,
+      main = paste("Distribution of", input$distVar),
+      xlab = input$distVar,
+      col = rgb(0.3, 0.5, 0.8, 0.6),
+      border = "white"
+    )
+
     lines(density(var_data, na.rm = TRUE), col = "#E91E63", lwd = 3)
-    
+
     # Boxplot with statistics
     boxplot(var_data,
-            main = paste("Boxplot of", input$distVar),
-            ylab = input$distVar,
-            col = rgb(0.5, 0.8, 0.5, 0.6),
-            border = "#388E3C",
-            horizontal = FALSE)
-    
+      main = paste("Boxplot of", input$distVar),
+      ylab = input$distVar,
+      col = rgb(0.5, 0.8, 0.5, 0.6),
+      border = "#388E3C",
+      horizontal = FALSE
+    )
+
     # Add mean line
     abline(h = mean(var_data, na.rm = TRUE), col = "#F44336", lwd = 2, lty = 2)
     legend("topright", legend = "Mean", col = "#F44336", lty = 2, lwd = 2, cex = 0.8)
   })
-  
+
   # Automated Insights
   output$dataInsights <- renderUI({
     req(data$raw)
-    
+
     insights <- list()
-    
+
     # Dataset size insight
     n_rows <- nrow(data$raw)
-    if(n_rows < 30) {
+    if (n_rows < 30) {
       insights <- c(insights, paste0(
-        "<li><strong>Small Sample:</strong> Your dataset has only ", n_rows, 
+        "<li><strong>Small Sample:</strong> Your dataset has only ", n_rows,
         " rows. Consider collecting more data for robust statistical analysis.</li>"
       ))
-    } else if(n_rows > 10000) {
+    } else if (n_rows > 10000) {
       insights <- c(insights, paste0(
-        "<li><strong>Large Dataset:</strong> With ", format(n_rows, big.mark=","), 
+        "<li><strong>Large Dataset:</strong> With ", format(n_rows, big.mark = ","),
         " rows, you have excellent statistical power for analysis.</li>"
       ))
     }
-    
+
     # Missing values insight
     missing_counts <- colSums(is.na(data$raw))
-    if(sum(missing_counts) == 0) {
-      insights <- c(insights, 
+    if (sum(missing_counts) == 0) {
+      insights <- c(
+        insights,
         "<li><strong>Complete Data:</strong> Excellent! No missing values detected.</li>"
       )
-    } else if(sum(missing_counts) > nrow(data$raw) * 0.1) {
-      insights <- c(insights,
+    } else if (sum(missing_counts) > nrow(data$raw) * 0.1) {
+      insights <- c(
+        insights,
         "<li><strong>Missing Data:</strong> Significant missing values detected. Consider imputation methods.</li>"
       )
     }
-    
+
     # Variable balance
-    if(length(data$numeric_vars) > 0 && length(data$categorical_vars) > 0) {
-      insights <- c(insights,
+    if (length(data$numeric_vars) > 0 && length(data$categorical_vars) > 0) {
+      insights <- c(
+        insights,
         "<li><strong>Mixed Data Types:</strong> Your dataset contains both numerical and categorical variables, enabling diverse analyses.</li>"
       )
-    } else if(length(data$numeric_vars) == 0) {
-      insights <- c(insights,
+    } else if (length(data$numeric_vars) == 0) {
+      insights <- c(
+        insights,
         "<li><strong>All Categorical:</strong> Your dataset contains only categorical variables. Focus on frequency analysis and chi-square tests.</li>"
       )
-    } else if(length(data$categorical_vars) == 0) {
-      insights <- c(insights,
+    } else if (length(data$categorical_vars) == 0) {
+      insights <- c(
+        insights,
         "<li><strong>All Numerical:</strong> Your dataset is entirely numerical. Perfect for correlation and regression analysis.</li>"
       )
     }
-    
+
     # Recommended analyses
     recommendations <- "<h4><i class='fa fa-tasks'></i> Recommended Next Steps:</h4><ul>"
-    
-    if(length(data$numeric_vars) >= 2) {
-      recommendations <- paste0(recommendations,
+
+    if (length(data$numeric_vars) >= 2) {
+      recommendations <- paste0(
+        recommendations,
         "<li>Explore correlations in the <strong>Correlation Matrix</strong> tab</li>"
       )
     }
-    
-    if(length(data$categorical_vars) >= 2) {
-      recommendations <- paste0(recommendations,
+
+    if (length(data$categorical_vars) >= 2) {
+      recommendations <- paste0(
+        recommendations,
         "<li>Analyze relationships in the <strong>Cross-Tabulation</strong> tab</li>"
       )
     }
-    
-    if(length(data$numeric_vars) > 0 && length(data$categorical_vars) > 0) {
-      recommendations <- paste0(recommendations,
+
+    if (length(data$numeric_vars) > 0 && length(data$categorical_vars) > 0) {
+      recommendations <- paste0(
+        recommendations,
         "<li>Compare groups in the <strong>Two Variables</strong> tab</li>"
       )
     }
-    
+
     recommendations <- paste0(recommendations, "</ul>")
-    
+
     HTML(paste0(
       '<div style="background-color: #E3F2FD; padding: 15px; border-radius: 5px; border-left: 4px solid #2196F3;">',
       '<h4><i class="fa fa-lightbulb"></i> Data Insights:</h4>',
-      '<ul>',
+      "<ul>",
       paste(insights, collapse = "\n"),
-      '</ul>',
-      '</div>',
-      '<br>',
+      "</ul>",
+      "</div>",
+      "<br>",
       '<div style="background-color: #F3E5F5; padding: 15px; border-radius: 5px; border-left: 4px solid #9C27B0;">',
       recommendations,
-      '</div>'
+      "</div>"
     ))
   })
-  
+
   # Download report (enhanced)
   output$downloadReport <- downloadHandler(
     filename = function() {
@@ -3589,10 +4421,10 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       req(data$raw)
-      
+
       missing_counts <- colSums(is.na(data$raw))
       completeness <- 100 * (1 - sum(missing_counts) / (nrow(data$raw) * ncol(data$raw)))
-      
+
       report_text <- paste(
         "COMPREHENSIVE DATA SUMMARY REPORT",
         strrep("=", 60),
@@ -3614,8 +4446,9 @@ server <- function(input, output, session) {
         "VARIABLE LIST:",
         strrep("-", 60),
         paste(sapply(1:ncol(data$raw), function(i) {
-          type <- ifelse(names(data$raw)[i] %in% data$numeric_vars, 
-                        "[Numerical]", "[Categorical]")
+          type <- ifelse(names(data$raw)[i] %in% data$numeric_vars,
+            "[Numerical]", "[Categorical]"
+          )
           sprintf("%2d. %-30s %s", i, names(data$raw)[i], type)
         }), collapse = "\n"),
         "",
@@ -3656,15 +4489,20 @@ server <- function(input, output, session) {
     # Scatter plot
     output$slrScatter <- renderPlot({
       plot(x, y,
-           xlab = input$slrX, ylab = input$slrY,
-           main = paste("Scatter Plot:", input$slrY, "vs", input$slrX),
-           pch = 19, col = rgb(0.2, 0.5, 0.8, 0.6), cex = 1.2)
+        xlab = input$slrX, ylab = input$slrY,
+        main = paste("Scatter Plot:", input$slrY, "vs", input$slrX),
+        pch = 19, col = rgb(0.2, 0.5, 0.8, 0.6), cex = 1.2
+      )
       abline(model, col = "red", lwd = 2)
       legend("topleft",
-             legend = paste0("y = ", round(coef(model)[1], 4),
-                             ifelse(length(coef(model)) > 1,
-                                    paste0(" + ", round(coef(model)[2], 4), " x"), "")),
-             col = "red", lwd = 2, bty = "n")
+        legend = paste0(
+          "y = ", round(coef(model)[1], 4),
+          ifelse(length(coef(model)) > 1,
+            paste0(" + ", round(coef(model)[2], 4), " x"), ""
+          )
+        ),
+        col = "red", lwd = 2, bty = "n"
+      )
     })
 
     # Model summary
@@ -3699,11 +4537,13 @@ server <- function(input, output, session) {
 
       cat("\nSpearman (non-parametric):\n")
       tryCatch(print(cor.test(y, x, method = "spearman")),
-               warning = function(w) cat(conditionMessage(w), "\n"))
+        warning = function(w) cat(conditionMessage(w), "\n")
+      )
 
       cat("\nKendall (non-parametric):\n")
       tryCatch(print(cor.test(y, x, method = "kendall")),
-               warning = function(w) cat(conditionMessage(w), "\n"))
+        warning = function(w) cat(conditionMessage(w), "\n")
+      )
     })
   })
 
@@ -3711,40 +4551,46 @@ server <- function(input, output, session) {
   observeEvent(input$runSLRPredict, {
     req(slr_model(), input$slrNewX)
 
-    tryCatch({
-      x0 <- as.numeric(trimws(strsplit(input$slrNewX, ",")[[1]]))
-      new_data <- data.frame(x = x0)
+    tryCatch(
+      {
+        x0 <- as.numeric(trimws(strsplit(input$slrNewX, ",")[[1]]))
+        new_data <- data.frame(x = x0)
 
-      x_orig <- data$raw[[input$slrX]]
+        x_orig <- data$raw[[input$slrX]]
 
-      output$slrPredInterval <- DT::renderDT({
-        pred <- as.data.frame(
-          predict(slr_model(), newdata = new_data, interval = "prediction", level = 0.95)
-        )
-        pred <- cbind(`X Value` = x0, round(pred, 4))
-        DT::datatable(pred,
-                      options = list(dom = "t", pageLength = nrow(pred), scrollX = TRUE),
-                      rownames = FALSE)
-      })
-      output$slrConfInterval <- DT::renderDT({
-        conf <- as.data.frame(
-          predict(slr_model(), newdata = new_data, interval = "confidence", level = 0.95)
-        )
-        conf <- cbind(`X Value` = x0, round(conf, 4))
-        DT::datatable(conf,
-                      options = list(dom = "t", pageLength = nrow(conf), scrollX = TRUE),
-                      rownames = FALSE)
-      })
-      output$slrInterpExtrap <- renderPrint({
-        check <- ifelse(x0 > max(x_orig, na.rm = TRUE) | x0 < min(x_orig, na.rm = TRUE),
-                        "EXTRAPOLATION", "interpolation")
-        for (i in seq_along(x0)) {
-          cat(sprintf("x = %-8.3f  =>  %s\n", x0[i], check[i]))
-        }
-      })
-    }, error = function(e) {
-      showNotification(paste("Prediction error:", e$message), type = "error")
-    })
+        output$slrPredInterval <- DT::renderDT({
+          pred <- as.data.frame(
+            predict(slr_model(), newdata = new_data, interval = "prediction", level = 0.95)
+          )
+          pred <- cbind(`X Value` = x0, round(pred, 4))
+          DT::datatable(pred,
+            options = list(dom = "t", pageLength = nrow(pred), scrollX = TRUE),
+            rownames = FALSE
+          )
+        })
+        output$slrConfInterval <- DT::renderDT({
+          conf <- as.data.frame(
+            predict(slr_model(), newdata = new_data, interval = "confidence", level = 0.95)
+          )
+          conf <- cbind(`X Value` = x0, round(conf, 4))
+          DT::datatable(conf,
+            options = list(dom = "t", pageLength = nrow(conf), scrollX = TRUE),
+            rownames = FALSE
+          )
+        })
+        output$slrInterpExtrap <- renderPrint({
+          check <- ifelse(x0 > max(x_orig, na.rm = TRUE) | x0 < min(x_orig, na.rm = TRUE),
+            "EXTRAPOLATION", "interpolation"
+          )
+          for (i in seq_along(x0)) {
+            cat(sprintf("x = %-8.3f  =>  %s\n", x0[i], check[i]))
+          }
+        })
+      },
+      error = function(e) {
+        showNotification(paste("Prediction error:", e$message), type = "error")
+      }
+    )
   })
 
   # ===== MULTIPLE LINEAR REGRESSION SERVER =====
@@ -3757,8 +4603,9 @@ server <- function(input, output, session) {
   output$mlrXSelect <- renderUI({
     req(data$numeric_vars)
     selectInput("mlrX", "Predictor Variables (x1, x2, ...):",
-                choices = data$numeric_vars, multiple = TRUE,
-                selected = data$numeric_vars[1:min(2, length(data$numeric_vars))])
+      choices = data$numeric_vars, multiple = TRUE,
+      selected = data$numeric_vars[1:min(2, length(data$numeric_vars))]
+    )
   })
 
   mlr_model <- reactiveVal(NULL)
@@ -3772,7 +4619,7 @@ server <- function(input, output, session) {
       return()
     }
 
-    y    <- data$raw[[input$mlrY]]
+    y <- data$raw[[input$mlrY]]
     xvars <- input$mlrX
     mlr_xvars(xvars)
 
@@ -3794,8 +4641,9 @@ server <- function(input, output, session) {
     output$mlrPairs <- renderPlot({
       all_vars <- c(input$mlrY, xvars)
       pairs(data$raw[, all_vars, drop = FALSE],
-            main = "Scatter Plot Matrix",
-            pch = 19, col = rgb(0.2, 0.5, 0.8, 0.4), cex = 0.7)
+        main = "Scatter Plot Matrix",
+        pch = 19, col = rgb(0.2, 0.5, 0.8, 0.4), cex = 0.7
+      )
     })
 
     # Correlation matrix heatmap
@@ -3803,11 +4651,12 @@ server <- function(input, output, session) {
       all_vars <- c(input$mlrY, xvars)
       corr_mat <- cor(data$raw[, all_vars, drop = FALSE], use = "complete.obs")
       corrplot.mixed(corr_mat,
-                     lower = "number", upper = "circle",
-                     outline = TRUE, mar = c(1, 1, 0, 0),
-                     tl.cex = 0.7, tl.col = "black",
-                     cl.cex = 0.6, cl.ratio = 0.2,
-                     number.cex = 0.85, number.digits = 3)
+        lower = "number", upper = "circle",
+        outline = TRUE, mar = c(1, 1, 0, 0),
+        tl.cex = 0.7, tl.col = "black",
+        cl.cex = 0.6, cl.ratio = 0.2,
+        number.cex = 0.85, number.digits = 3
+      )
     })
 
     # Observed vs predicted fit line plot
@@ -3815,15 +4664,17 @@ server <- function(input, output, session) {
       y_obs <- model.response(model.frame(model))
       y_hat <- fitted(model)
       plot(y_hat, y_obs,
-           xlab = "Predicted values",
-           ylab = "Observed values",
-           main = "Observed vs Predicted",
-           pch = 19, col = rgb(0.2, 0.5, 0.8, 0.6))
-      abline(0, 1, col = "red", lwd = 2, lty = 2)      # perfect fit line
-      abline(lm(y_obs ~ y_hat), col = "darkgreen", lwd = 2)  # empirical fit line
+        xlab = "Predicted values",
+        ylab = "Observed values",
+        main = "Observed vs Predicted",
+        pch = 19, col = rgb(0.2, 0.5, 0.8, 0.6)
+      )
+      abline(0, 1, col = "red", lwd = 2, lty = 2) # perfect fit line
+      abline(lm(y_obs ~ y_hat), col = "darkgreen", lwd = 2) # empirical fit line
       legend("topleft",
-             legend = c("Perfect fit (y = x)", "Observed~Predicted fit"),
-             col = c("red", "darkgreen"), lty = c(2, 1), lwd = 2, bty = "n")
+        legend = c("Perfect fit (y = x)", "Observed~Predicted fit"),
+        col = c("red", "darkgreen"), lty = c(2, 1), lwd = 2, bty = "n"
+      )
     })
 
     # Model summary
@@ -3895,19 +4746,22 @@ server <- function(input, output, session) {
       if (length(xvars) >= 2) {
         vif_vals <- vif(model)
         bar_colors <- ifelse(vif_vals >= 10, "#F44336",
-                             ifelse(vif_vals >= 5, "#FF9800", "steelblue"))
+          ifelse(vif_vals >= 5, "#FF9800", "steelblue")
+        )
         barplot(vif_vals,
-                main = "VIF Values",
-                ylab = "VIF",
-                col = bar_colors,
-                horiz = FALSE,
-                ylim = c(0, max(max(vif_vals) * 1.15, 11)),
-                las = 2)
-        abline(h = 5,  col = "orange", lwd = 2, lty = 2)
-        abline(h = 10, col = "red",    lwd = 2, lty = 3)
+          main = "VIF Values",
+          ylab = "VIF",
+          col = bar_colors,
+          horiz = FALSE,
+          ylim = c(0, max(max(vif_vals) * 1.15, 11)),
+          las = 2
+        )
+        abline(h = 5, col = "orange", lwd = 2, lty = 2)
+        abline(h = 10, col = "red", lwd = 2, lty = 3)
         legend("topright",
-               legend = c("VIF = 5 (moderate)", "VIF = 10 (severe)"),
-               col = c("orange", "red"), lty = c(2, 3), lwd = 2, bty = "n", cex = 0.85)
+          legend = c("VIF = 5 (moderate)", "VIF = 10 (severe)"),
+          col = c("orange", "red"), lty = c(2, 3), lwd = 2, bty = "n", cex = 0.85
+        )
       } else {
         plot.new()
         text(0.5, 0.5, "Need >= 2 predictors for VIF", cex = 1.4)
@@ -3920,10 +4774,13 @@ server <- function(input, output, session) {
 
     output$mlrNewXInputs <- renderUI({
       inputs <- lapply(xvars, function(xv) {
-        column(max(2, floor(12 / length(xvars))),
-               textInput(make_input_id(xv),
-                         paste("Values for", xv, "(comma-sep):"),
-                         placeholder = "e.g. 25, 10"))
+        column(
+          max(2, floor(12 / length(xvars))),
+          textInput(make_input_id(xv),
+            paste("Values for", xv, "(comma-sep):"),
+            placeholder = "e.g. 25, 10"
+          )
+        )
       })
       do.call(fluidRow, inputs)
     })
@@ -3934,52 +4791,1495 @@ server <- function(input, output, session) {
     req(mlr_model(), mlr_xvars())
     xvars <- mlr_xvars()
 
-    tryCatch({
-      # Use the same sanitized ID helper to look up each input value
-      make_input_id <- function(v) paste0("mlr_x_", gsub("[^a-zA-Z0-9]", "_", v))
+    tryCatch(
+      {
+        # Use the same sanitized ID helper to look up each input value
+        make_input_id <- function(v) paste0("mlr_x_", gsub("[^a-zA-Z0-9]", "_", v))
 
-      # Collect entered values; name by original column name for predict()
-      new_vals <- lapply(xvars, function(xv) {
-        raw_txt <- input[[make_input_id(xv)]]
-        as.numeric(trimws(strsplit(raw_txt, ",")[[1]]))
-      })
-      names(new_vals) <- xvars
-      new_data <- as.data.frame(new_vals, check.names = FALSE)
+        # Collect entered values; name by original column name for predict()
+        new_vals <- lapply(xvars, function(xv) {
+          raw_txt <- input[[make_input_id(xv)]]
+          as.numeric(trimws(strsplit(raw_txt, ",")[[1]]))
+        })
+        names(new_vals) <- xvars
+        new_data <- as.data.frame(new_vals, check.names = FALSE)
 
-      output$mlrPredInterval <- DT::renderDT({
-        pred <- as.data.frame(
-          predict(mlr_model(), newdata = new_data, interval = "prediction", level = 0.95)
-        )
-        pred <- cbind(Observation = seq_len(nrow(pred)), round(pred, 4))
-        DT::datatable(pred,
-                      options = list(dom = "t", pageLength = nrow(pred), scrollX = TRUE),
-                      rownames = FALSE)
-      })
-      output$mlrConfInterval <- DT::renderDT({
-        conf <- as.data.frame(
-          predict(mlr_model(), newdata = new_data, interval = "confidence", level = 0.95)
-        )
-        conf <- cbind(Observation = seq_len(nrow(conf)), round(conf, 4))
-        DT::datatable(conf,
-                      options = list(dom = "t", pageLength = nrow(conf), scrollX = TRUE),
-                      rownames = FALSE)
-      })
+        output$mlrPredInterval <- DT::renderDT({
+          pred <- as.data.frame(
+            predict(mlr_model(), newdata = new_data, interval = "prediction", level = 0.95)
+          )
+          pred <- cbind(Observation = seq_len(nrow(pred)), round(pred, 4))
+          DT::datatable(pred,
+            options = list(dom = "t", pageLength = nrow(pred), scrollX = TRUE),
+            rownames = FALSE
+          )
+        })
+        output$mlrConfInterval <- DT::renderDT({
+          conf <- as.data.frame(
+            predict(mlr_model(), newdata = new_data, interval = "confidence", level = 0.95)
+          )
+          conf <- cbind(Observation = seq_len(nrow(conf)), round(conf, 4))
+          DT::datatable(conf,
+            options = list(dom = "t", pageLength = nrow(conf), scrollX = TRUE),
+            rownames = FALSE
+          )
+        })
 
-      # Leverage-based check
-      output$mlrInterpExtrap <- renderPrint({
-        hii      <- hatvalues(mlr_model())
-        h_new    <- (predict(mlr_model(), newdata = new_data,
-                             interval = "confidence", se.fit = TRUE)$se.fit /
-                       sigma(mlr_model()))^2
-        result   <- ifelse(h_new > max(hii), "EXTRAPOLATION", "interpolation")
-        for (i in seq_along(result)) {
-          cat(sprintf("Observation %d  =>  %s  (h_new=%.4f, max(hii)=%.4f)\n",
-                      i, result[i], h_new[i], max(hii)))
-        }
-      })
-    }, error = function(e) {
-      showNotification(paste("Prediction error:", e$message), type = "error")
+        # Leverage-based check
+        output$mlrInterpExtrap <- renderPrint({
+          hii <- hatvalues(mlr_model())
+          h_new <- (predict(mlr_model(),
+            newdata = new_data,
+            interval = "confidence", se.fit = TRUE
+          )$se.fit /
+            sigma(mlr_model()))^2
+          result <- ifelse(h_new > max(hii), "EXTRAPOLATION", "interpolation")
+          for (i in seq_along(result)) {
+            cat(sprintf(
+              "Observation %d  =>  %s  (h_new=%.4f, max(hii)=%.4f)\n",
+              i, result[i], h_new[i], max(hii)
+            ))
+          }
+        })
+      },
+      error = function(e) {
+        showNotification(paste("Prediction error:", e$message), type = "error")
+      }
+    )
+  })
+
+  # ===== CHAPTER 9: MULTICOLLINEARITY SERVER =====
+
+  ch9_results <- reactiveVal(NULL)
+  ch9_xvars <- reactiveVal(character(0))
+
+  calc_vif_from_matrix <- function(M) {
+    M <- as.matrix(M)
+    if (ncol(M) < 2) {
+      return(setNames(rep(NA_real_, ncol(M)), colnames(M)))
+    }
+    out <- rep(NA_real_, ncol(M))
+    names(out) <- colnames(M)
+    for (j in seq_len(ncol(M))) {
+      yj <- M[, j]
+      Xj <- M[, -j, drop = FALSE]
+      fit_j <- tryCatch(stats::lm(yj ~ Xj), error = function(e) NULL)
+      if (!is.null(fit_j)) {
+        r2 <- summary(fit_j)$r.squared
+        if (is.finite(r2) && r2 < 1) out[j] <- 1 / (1 - r2)
+      }
+    }
+    out
+  }
+
+  calc_ridge_vif_from_matrix <- function(M, lambda) {
+    M <- as.matrix(M)
+    if (ncol(M) < 2 || !is.finite(lambda)) {
+      return(setNames(rep(NA_real_, ncol(M)), colnames(M)))
+    }
+
+    keep <- apply(M, 2, function(x) stats::sd(x, na.rm = TRUE) > 0)
+    M <- M[, keep, drop = FALSE]
+    if (ncol(M) < 2) {
+      return(setNames(rep(NA_real_, ncol(M)), colnames(M)))
+    }
+
+    C <- stats::cor(scale(M), use = "pairwise.complete.obs")
+    C[!is.finite(C)] <- 0
+
+    p <- ncol(C)
+    A <- tryCatch(solve(C + lambda * diag(p)), error = function(e) NULL)
+    if (is.null(A)) {
+      return(setNames(rep(NA_real_, p), colnames(C)))
+    }
+
+    ridge_vif <- diag(A %*% C %*% A)
+    names(ridge_vif) <- colnames(C)
+    ridge_vif
+  }
+
+  output$ch9YSelect <- renderUI({
+    req(data$numeric_vars)
+    selectInput("ch9Y", "Response (Y):", choices = data$numeric_vars)
+  })
+
+  output$ch9XSelect <- renderUI({
+    req(data$numeric_vars)
+    selectInput(
+      "ch9X",
+      "Predictors:",
+      choices = data$numeric_vars,
+      multiple = TRUE,
+      selected = data$numeric_vars[1:min(3, length(data$numeric_vars))]
+    )
+  })
+
+  output$ch9NewXInputs <- renderUI({
+    xv <- ch9_xvars()
+    if (length(xv) != 3) {
+      return(tags$div(
+        class = "hint-text",
+        icon("info-circle"),
+        "Run the multicollinearity model first (with exactly 3 predictors)."
+      ))
+    }
+    inputs <- lapply(xv, function(v) {
+      textInput(
+        inputId = paste0("ch9new_", gsub("[^a-zA-Z0-9]", "_", v)),
+        label = paste("Values for", v, "(comma-separated):"),
+        value = ""
+      )
     })
+    do.call(tagList, inputs)
+  })
+
+  observeEvent(input$runCh9, {
+    req(data$raw, input$ch9Y, input$ch9X)
+
+    if (length(input$ch9X) != 3) {
+      showNotification("Please select exactly 3 predictors.", type = "error")
+      return()
+    }
+
+    y_name <- input$ch9Y
+    x_names <- input$ch9X
+    if (y_name %in% x_names) {
+      showNotification("Response Y cannot be included among the 3 predictors.", type = "error")
+      return()
+    }
+    ch9_xvars(x_names)
+
+    sel <- c(y_name, x_names)
+    df_raw <- data$raw[, sel, drop = FALSE]
+    df_raw <- df_raw[complete.cases(df_raw), , drop = FALSE]
+
+    if (nrow(df_raw) < 12) {
+      showNotification("Need at least 12 complete rows to run this chapter reliably.", type = "error")
+      return()
+    }
+
+    bt <- function(v) paste0("`", v, "`")
+    i_terms <- c(
+      paste0("I(", bt(x_names[1]), "^2)"),
+      paste0("I(", bt(x_names[2]), "^2)"),
+      paste0("I(", bt(x_names[3]), "^2)"),
+      paste0("I(", bt(x_names[1]), "*", bt(x_names[2]), ")"),
+      paste0("I(", bt(x_names[1]), "*", bt(x_names[3]), ")"),
+      paste0("I(", bt(x_names[2]), "*", bt(x_names[3]), ")")
+    )
+    rhs <- c(sapply(x_names, bt), i_terms)
+    form_orig <- as.formula(paste(bt(y_name), "~", paste(rhs, collapse = " + ")))
+
+    fit_orig <- tryCatch(lm(form_orig, data = df_raw), error = function(e) NULL)
+    if (is.null(fit_orig)) {
+      showNotification("Original quadratic model failed to fit.", type = "error")
+      return()
+    }
+
+    vif_orig <- tryCatch(car::vif(fit_orig), error = function(e) NULL)
+
+    n <- nrow(df_raw)
+    center_scale <- function(x) {
+      denom <- sqrt((n - 1) * stats::var(x))
+      if (!is.finite(denom) || denom == 0) denom <- stats::sd(x)
+      if (!is.finite(denom) || denom == 0) denom <- 1
+      (x - mean(x)) / denom
+    }
+
+    df_cent <- data.frame(
+      y = df_raw[[y_name]],
+      x1 = center_scale(df_raw[[x_names[1]]]),
+      x2 = center_scale(df_raw[[x_names[2]]]),
+      x3 = center_scale(df_raw[[x_names[3]]])
+    )
+
+    form_cent <- y ~ x1 + x2 + x3 + I(x1^2) + I(x2^2) + I(x3^2) +
+      I(x1 * x2) + I(x1 * x3) + I(x2 * x3)
+    fit_cent <- tryCatch(lm(form_cent, data = df_cent), error = function(e) NULL)
+    if (is.null(fit_cent)) {
+      showNotification("Centered model failed to fit.", type = "error")
+      return()
+    }
+
+    vif_cent <- tryCatch(car::vif(fit_cent), error = function(e) NULL)
+
+    X <- model.matrix(form_orig, data = df_raw)[, -1, drop = FALSE]
+    y_vec <- df_raw[[y_name]]
+    cv_folds <- max(3, min(10, floor(nrow(df_raw) / 3)))
+
+    cv_ridge <- NULL
+    cv_lasso <- NULL
+    ridge_model <- NULL
+    lasso_model <- NULL
+    best_lambda_ridge <- NA_real_
+    best_lambda_lasso <- NA_real_
+    ridge_coef <- NULL
+    lasso_coef <- NULL
+
+    if (has_glmnet()) {
+      set.seed(523132)
+      ridge_lambda <- exp(seq(log(0.001), log(10), length.out = 100))
+      cv_ridge <- suppressWarnings(glmnet::cv.glmnet(
+        X, y_vec,
+        alpha = 0, standardize = TRUE, nfolds = cv_folds, lambda = ridge_lambda
+      ))
+      best_lambda_ridge <- cv_ridge$lambda.min
+      ridge_model <- glmnet::glmnet(X, y_vec, alpha = 0, lambda = best_lambda_ridge)
+      ridge_coef <- as.matrix(stats::coef(ridge_model))
+
+      cv_lasso <- suppressWarnings(glmnet::cv.glmnet(
+        X, y_vec,
+        alpha = 1, standardize = TRUE, nfolds = cv_folds
+      ))
+      # Use the 1-SE rule for LASSO so the displayed model reflects variable selection,
+      # not just the smallest CV error with nearly all terms retained.
+      best_lambda_lasso <- cv_lasso$lambda.1se
+      lasso_model <- cv_lasso$glmnet.fit
+      lasso_coef <- as.matrix(stats::coef(cv_lasso, s = "lambda.1se"))
+    }
+
+    vif_ridge <- if (!is.null(ridge_coef)) {
+      tryCatch(calc_ridge_vif_from_matrix(X, best_lambda_ridge), error = function(e) NULL)
+    } else {
+      NULL
+    }
+
+    vif_lasso <- NULL
+    if (!is.null(lasso_coef)) {
+      lasso_vec <- as.numeric(lasso_coef[, 1])
+      names(lasso_vec) <- rownames(lasso_coef)
+      active_terms <- setdiff(names(lasso_vec[abs(lasso_vec) > 1e-8]), "(Intercept)")
+      if (length(active_terms) >= 2) {
+        vif_lasso <- tryCatch(calc_vif_from_matrix(X[, active_terms, drop = FALSE]), error = function(e) NULL)
+      } else {
+        vif_lasso <- setNames(rep(NA_real_, length(active_terms)), active_terms)
+      }
+    }
+
+    cv_rmse_orig <- tryCatch(
+      {
+        suppressWarnings(sqrt(boot::cv.glm(df_raw, glm(form_orig, data = df_raw), K = cv_folds)$delta[1]))
+      },
+      error = function(e) NA_real_
+    )
+
+    cv_rmse_cent <- tryCatch(
+      {
+        suppressWarnings(sqrt(boot::cv.glm(df_cent, glm(form_cent, data = df_cent), K = cv_folds)$delta[1]))
+      },
+      error = function(e) NA_real_
+    )
+
+    cv_rmse_ridge <- if (!is.null(cv_ridge)) sqrt(min(cv_ridge$cvm)) else NA_real_
+    cv_rmse_lasso <- if (!is.null(cv_lasso)) {
+      lasso_idx <- which.min(abs(cv_lasso$lambda - best_lambda_lasso))
+      sqrt(cv_lasso$cvm[lasso_idx])
+    } else {
+      NA_real_
+    }
+
+    ch9_results(list(
+      y_name = y_name,
+      x_names = x_names,
+      form_orig = form_orig,
+      fit_orig = fit_orig,
+      vif_orig = vif_orig,
+      fit_cent = fit_cent,
+      vif_cent = vif_cent,
+      center_n = n,
+      X_cols = colnames(X),
+      cv_folds = cv_folds,
+      cv_ridge = cv_ridge,
+      cv_lasso = cv_lasso,
+      ridge_model = ridge_model,
+      lasso_model = lasso_model,
+      best_lambda_ridge = best_lambda_ridge,
+      best_lambda_lasso = best_lambda_lasso,
+      ridge_coef = ridge_coef,
+      lasso_coef = lasso_coef,
+      vif_ridge = vif_ridge,
+      vif_lasso = vif_lasso,
+      rmse = c(
+        OLS = cv_rmse_orig,
+        `OLS (Centered)` = cv_rmse_cent,
+        Ridge = cv_rmse_ridge,
+        LASSO = cv_rmse_lasso
+      )
+    ))
+
+    if (!has_glmnet()) {
+      showNotification("Model completed. Ridge/LASSO skipped because 'glmnet' is not installed.", type = "warning")
+    } else {
+      showNotification("Multicollinearity model completed successfully.", type = "message")
+    }
+  })
+
+  output$ch9ModelOrig <- renderPrint({
+    req(ch9_results())
+    r <- ch9_results()
+    cat("Quadratic model with original predictors:\n")
+    print(r$form_orig)
+    cat("\n")
+    print(summary(r$fit_orig))
+  })
+
+  make_vif_table <- function(vif_vals) {
+    if (is.null(vif_vals)) {
+      return(NULL)
+    }
+    data.frame(
+      Term = names(vif_vals),
+      VIF = as.numeric(vif_vals),
+      Level = ifelse(vif_vals > 10, "Severe",
+        ifelse(vif_vals >= 5, "Moderate", "Acceptable")
+      ),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  output$ch9VIFOrigTbl <- DT::renderDT({
+    req(ch9_results())
+    tbl <- make_vif_table(ch9_results()$vif_orig)
+    req(tbl)
+    dt <- DT::datatable(
+      tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = 12, scrollX = TRUE, autoWidth = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = "VIF", digits = 4)
+    DT::formatStyle(
+      dt, "Level",
+      color = "white",
+      fontWeight = "700",
+      backgroundColor = DT::styleEqual(
+        c("Acceptable", "Moderate", "Severe"),
+        c("#2563eb", "#f59e0b", "#ef4444")
+      )
+    )
+  })
+
+  output$ch9VIFOrigPlot <- renderPlot({
+    req(ch9_results())
+    vif_vals <- ch9_results()$vif_orig
+    if (is.null(vif_vals)) {
+      plot.new()
+      text(0.5, 0.5, "VIF unavailable for original model")
+      return()
+    }
+    vif_cap <- pmin(vif_vals, 10)
+    cols <- ifelse(vif_vals > 10, "#ef4444", ifelse(vif_vals >= 5, "#f59e0b", "steelblue"))
+    mids <- barplot(
+      vif_cap,
+      col = cols,
+      ylab = "VIF (Capped at 10)",
+      main = "VIF Values (Original Data)",
+      las = 2,
+      ylim = c(0, 10)
+    )
+    text(
+      x = mids,
+      y = pmin(vif_cap + 0.35, 9.8),
+      labels = ifelse(vif_vals > 10, paste0(">", "10 (", round(vif_vals, 1), ")"), round(vif_vals, 1)),
+      cex = 0.75,
+      col = "#111827"
+    )
+    abline(h = 5, col = "#f59e0b", lty = 2, lwd = 2)
+    abline(h = 10, col = "#ef4444", lty = 2, lwd = 2)
+  })
+
+  output$ch9CenterInfo <- renderPrint({
+    req(ch9_results())
+    r <- ch9_results()
+    cat("Centered/scaled variables used:\n")
+    cat("x1 =", r$x_names[1], ", x2 =", r$x_names[2], ", x3 =", r$x_names[3], "\n")
+    cat("Formula applied: x = (x - mean(x)) / sqrt((n - 1) * var(x))\n")
+    cat("n =", r$center_n, "\n")
+  })
+
+  output$ch9ModelCent <- renderPrint({
+    req(ch9_results())
+    print(summary(ch9_results()$fit_cent))
+  })
+
+  output$ch9VIFCentTbl <- DT::renderDT({
+    req(ch9_results())
+    tbl <- make_vif_table(ch9_results()$vif_cent)
+    req(tbl)
+    dt <- DT::datatable(
+      tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = 12, scrollX = TRUE, autoWidth = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = "VIF", digits = 4)
+    DT::formatStyle(
+      dt, "Level",
+      color = "white",
+      fontWeight = "700",
+      backgroundColor = DT::styleEqual(
+        c("Acceptable", "Moderate", "Severe"),
+        c("#2563eb", "#f59e0b", "#ef4444")
+      )
+    )
+  })
+
+  output$ch9VIFCentPlot <- renderPlot({
+    req(ch9_results())
+    vif_vals <- ch9_results()$vif_cent
+    if (is.null(vif_vals)) {
+      plot.new()
+      text(0.5, 0.5, "VIF unavailable for centered model")
+      return()
+    }
+    vif_cap <- pmin(vif_vals, 10)
+    cols <- ifelse(vif_vals > 10, "#ef4444", ifelse(vif_vals >= 5, "#f59e0b", "steelblue"))
+    mids <- barplot(
+      vif_cap,
+      col = cols,
+      ylab = "VIF (Capped at 10)",
+      main = "VIF Values (Centered Data)",
+      las = 2,
+      ylim = c(0, 10)
+    )
+    text(
+      x = mids,
+      y = pmin(vif_cap + 0.35, 9.8),
+      labels = ifelse(vif_vals > 10, paste0(">", "10 (", round(vif_vals, 1), ")"), round(vif_vals, 1)),
+      cex = 0.75,
+      col = "#111827"
+    )
+    abline(h = 5, col = "#f59e0b", lty = 2, lwd = 2)
+    abline(h = 10, col = "#ef4444", lty = 2, lwd = 2)
+  })
+
+  output$ch9RidgeCVPlot <- renderPlot({
+    req(ch9_results())
+    r <- ch9_results()
+    if (is.null(r$cv_ridge)) {
+      plot.new()
+      text(0.5, 0.5, "Ridge unavailable. Install package 'glmnet'.")
+      return()
+    }
+    plot(r$cv_ridge, main = paste0("Ridge Regression (", r$cv_folds, "-fold CV)"))
+  })
+
+  make_regularization_table <- function(best_lambda, coef_mat, vif_vals = NULL, model_name = "Model",
+                                        lambda_label = "Best lambda", show_selection = FALSE,
+                                        zero_tol = 1e-8) {
+    if (is.null(coef_mat) || !is.matrix(coef_mat)) {
+      out <- data.frame(
+        Item = paste(model_name, "Status"),
+        Value = "Unavailable. Install package 'glmnet'.",
+        VIF = NA_real_,
+        stringsAsFactors = FALSE
+      )
+      if (show_selection) out$Status <- "Unavailable"
+      return(out)
+    }
+    coef_df <- data.frame(
+      Item = rownames(coef_mat),
+      Value = as.numeric(coef_mat[, 1]),
+      VIF = NA_real_,
+      stringsAsFactors = FALSE
+    )
+    if (show_selection) {
+      coef_df$Status <- ifelse(
+        coef_df$Item == "(Intercept)", "Intercept",
+        ifelse(abs(coef_df$Value) > zero_tol, "Selected", "Dropped")
+      )
+    }
+    if (!is.null(vif_vals) && length(vif_vals) > 0) {
+      idx <- match(coef_df$Item, names(vif_vals))
+      coef_df$VIF[!is.na(idx)] <- as.numeric(vif_vals[idx[!is.na(idx)]])
+    }
+    lambda_row <- data.frame(Item = lambda_label, Value = as.numeric(best_lambda), VIF = NA_real_, stringsAsFactors = FALSE)
+    if (show_selection) lambda_row$Status <- "CV choice"
+    rbind(
+      lambda_row,
+      coef_df
+    )
+  }
+
+  build_model_equation <- function(response_name, coef_mat, nonzero_only = FALSE, digits = 4) {
+    if (is.null(coef_mat) || !is.matrix(coef_mat)) return(NULL)
+    vals <- as.numeric(coef_mat[, 1])
+    names(vals) <- rownames(coef_mat)
+    b0 <- vals["(Intercept)"]
+    terms <- vals[setdiff(names(vals), "(Intercept)")]
+    if (nonzero_only) terms <- terms[abs(terms) > 1e-8]
+    if (length(terms) == 0) {
+      return(sprintf("%s = %.4f", response_name, b0))
+    }
+    pieces <- vapply(names(terms), function(nm) {
+      coef <- terms[[nm]]
+      sign <- if (coef >= 0) "+" else "-"
+      sprintf(" %s %.4f*%s", sign, abs(coef), nm)
+    }, character(1))
+    paste0(response_name, " = ", sprintf("%.4f", b0), paste0(pieces, collapse = ""))
+  }
+
+  output$ch9RidgeTbl <- DT::renderDT({
+    req(ch9_results())
+    r <- ch9_results()
+    tbl <- make_regularization_table(r$best_lambda_ridge, r$ridge_coef, r$vif_ridge, model_name = "Ridge")
+    dt <- DT::datatable(
+      tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = 12, scrollX = TRUE, autoWidth = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = c("Value", "VIF"), digits = 6)
+    DT::formatStyle(
+      dt, "Item",
+      target = "row",
+      backgroundColor = DT::styleEqual("Best lambda", "#fff7e6"),
+      fontWeight = DT::styleEqual("Best lambda", "700")
+    )
+  })
+
+  output$ch9RidgeEq <- renderUI({
+    req(ch9_results())
+    r <- ch9_results()
+    eq <- build_model_equation(r$y_name, r$ridge_coef, nonzero_only = FALSE, digits = 4)
+    if (is.null(eq)) {
+      return(tags$div(class = "hint-text", "Ridge model equation unavailable."))
+    }
+    tags$div(
+      style = "background:#fff7e6;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;",
+      tags$b("Ridge fitted model:"),
+      tags$div(style = "margin-top:6px;word-break:break-word;font-family:monospace;",
+               htmltools::htmlEscape(eq))
+    )
+  })
+
+  render_post_vif_table <- function(vif_vals, empty_label) {
+    if (is.null(vif_vals) || length(vif_vals) == 0) {
+      tbl <- data.frame(
+        Term = empty_label,
+        VIF = NA_real_,
+        Level = "N/A",
+        stringsAsFactors = FALSE
+      )
+    } else {
+      tbl <- data.frame(
+        Term = names(vif_vals),
+        VIF = as.numeric(vif_vals),
+        Level = ifelse(!is.finite(vif_vals), "N/A",
+                       ifelse(vif_vals > 10, "Severe",
+                              ifelse(vif_vals >= 5, "Moderate", "Acceptable"))),
+        stringsAsFactors = FALSE
+      )
+    }
+
+    dt <- DT::datatable(
+      tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = nrow(tbl), scrollX = TRUE, autoWidth = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = "VIF", digits = 6)
+    DT::formatStyle(
+      dt, "Level",
+      color = "white",
+      fontWeight = "700",
+      backgroundColor = DT::styleEqual(
+        c("Acceptable", "Moderate", "Severe", "N/A"),
+        c("#2563eb", "#f59e0b", "#ef4444", "#6b7280")
+      )
+    )
+  }
+
+  output$ch9RidgeVifTbl <- DT::renderDT({
+    req(ch9_results())
+    render_post_vif_table(ch9_results()$vif_ridge, "Ridge VIF unavailable")
+  })
+
+  output$ch9LassoCVPlot <- renderPlot({
+    req(ch9_results())
+    r <- ch9_results()
+    if (is.null(r$cv_lasso)) {
+      plot.new()
+      text(0.5, 0.5, "LASSO unavailable. Install package 'glmnet'.")
+      return()
+    }
+    plot(r$cv_lasso, main = paste0("LASSO Regression (", r$cv_folds, "-fold CV)"))
+  })
+
+  output$ch9LassoTbl <- DT::renderDT({
+    req(ch9_results())
+    r <- ch9_results()
+    tbl <- make_regularization_table(
+      r$best_lambda_lasso, r$lasso_coef, r$vif_lasso,
+      model_name = "LASSO",
+      lambda_label = "Selected lambda (1-SE)",
+      show_selection = TRUE
+    )
+    dt <- DT::datatable(
+      tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = 12, scrollX = TRUE, autoWidth = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = c("Value", "VIF"), digits = 6)
+    dt <- DT::formatStyle(
+      dt, "Item",
+      target = "row",
+      backgroundColor = DT::styleEqual("Selected lambda (1-SE)", "#fff7e6"),
+      fontWeight = DT::styleEqual("Selected lambda (1-SE)", "700")
+    )
+    DT::formatStyle(
+      dt, "Status",
+      color = DT::styleEqual(c("Selected", "Dropped", "Intercept", "CV choice"), c("#047857", "#991b1b", "#374151", "#92400e")),
+      fontWeight = DT::styleEqual(c("Selected", "Dropped", "CV choice"), c("700", "700", "700"))
+    )
+  })
+
+  output$ch9LassoEq <- renderUI({
+    req(ch9_results())
+    r <- ch9_results()
+    eq <- build_model_equation(r$y_name, r$lasso_coef, nonzero_only = TRUE, digits = 4)
+    if (is.null(eq)) {
+      return(tags$div(class = "hint-text", "LASSO model equation unavailable."))
+    }
+    tags$div(
+      style = "background:#fff1f2;border:1px solid #ef4444;border-radius:8px;padding:10px 12px;",
+      tags$b("LASSO fitted model (non-zero terms):"),
+      tags$div(style = "margin-top:6px;word-break:break-word;font-family:monospace;",
+               htmltools::htmlEscape(eq))
+    )
+  })
+
+  output$ch9LassoVifTbl <- DT::renderDT({
+    req(ch9_results())
+    render_post_vif_table(ch9_results()$vif_lasso, "No active terms for VIF")
+  })
+
+  observeEvent(input$runCh9Predict, {
+    req(ch9_results())
+    r <- ch9_results()
+    x_names <- r$x_names
+
+    parsed <- lapply(x_names, function(v) {
+      raw_txt <- input[[paste0("ch9new_", gsub("[^a-zA-Z0-9]", "_", v))]]
+      if (is.null(raw_txt) || trimws(raw_txt) == "") {
+        return(numeric(0))
+      }
+      as.numeric(trimws(strsplit(raw_txt, ",")[[1]]))
+    })
+    names(parsed) <- x_names
+
+    lens <- lengths(parsed)
+    if (any(lens == 0)) {
+      showNotification("Enter at least one numeric value for each predictor.", type = "error")
+      return()
+    }
+    if (any(vapply(parsed, function(x) any(is.na(x)), logical(1)))) {
+      showNotification("Please enter only numeric values in the prediction inputs.", type = "error")
+      return()
+    }
+    if (length(unique(lens)) != 1) {
+      showNotification("Each predictor must have the same number of values.", type = "error")
+      return()
+    }
+
+    new_data <- as.data.frame(parsed, check.names = FALSE)
+    form_no_y <- stats::delete.response(stats::terms(r$form_orig))
+    X_new <- model.matrix(form_no_y, data = new_data)
+    if ("(Intercept)" %in% colnames(X_new)) {
+      X_new <- X_new[, setdiff(colnames(X_new), "(Intercept)"), drop = FALSE]
+    }
+    X_new <- X_new[, r$X_cols, drop = FALSE]
+
+    pred_ols <- as.numeric(predict(r$fit_orig, newdata = new_data))
+    pred_ridge <- if (!is.null(r$cv_ridge)) {
+      as.numeric(predict(r$cv_ridge, newx = X_new, s = r$best_lambda_ridge))
+    } else {
+      rep(NA_real_, nrow(new_data))
+    }
+    pred_lasso <- if (!is.null(r$cv_lasso)) {
+      as.numeric(predict(r$cv_lasso, newx = X_new, s = r$best_lambda_lasso))
+    } else {
+      rep(NA_real_, nrow(new_data))
+    }
+
+    out <- cbind(new_data, `OLS Pred` = pred_ols, `Ridge Pred` = pred_ridge, `LASSO Pred` = pred_lasso)
+
+    output$ch9PredTable <- DT::renderDT({
+      DT::datatable(
+        round(out, 6),
+        rownames = FALSE,
+        options = list(pageLength = min(10, nrow(out)), scrollX = TRUE)
+      )
+    })
+  })
+
+  output$ch9ComparePlot <- renderPlot({
+    req(ch9_results())
+    rmse_vals <- ch9_results()$rmse
+    keep <- is.finite(rmse_vals)
+    rmse_plot <- rmse_vals[keep]
+    if (length(rmse_plot) == 0) {
+      plot.new()
+      text(0.5, 0.5, "No CV RMSE values available.")
+      return()
+    }
+    palette <- c("#2563eb", "#1d4ed8", "#0ea5e9", "#16a34a")
+    cols <- palette[seq_along(rmse_plot)]
+    folds <- ch9_results()$cv_folds %||% 10
+    barplot(rmse_plot, col = cols, ylab = paste0(folds, "-fold CV RMSE"), las = 2, main = "Model Comparison")
+  })
+
+  # ===== MODEL BUILDING SERVER =====
+
+  mb_results <- reactiveVal(NULL)
+  mb_final_model <- reactiveVal(NULL)
+
+  mb_bt <- function(x) paste0("`", gsub("`", "``", x), "`")
+
+  mb_formula <- function(y_name, x_names) {
+    rhs <- if (length(x_names) == 0) "1" else paste(mb_bt(x_names), collapse = " + ")
+    as.formula(paste(mb_bt(y_name), "~", rhs))
+  }
+
+  mb_complete_df <- function(df, y_name, x_names) {
+    sel <- c(y_name, x_names)
+    out <- df[, sel, drop = FALSE]
+    out <- out[complete.cases(out), , drop = FALSE]
+    as.data.frame(out, check.names = FALSE)
+  }
+
+  mb_model_metrics <- function(fit, full_mse, total_ss, n) {
+    p <- length(stats::coef(fit))
+    sse <- sum(stats::resid(fit)^2)
+    h <- stats::hatvalues(fit)
+    press <- sum((stats::resid(fit) / pmax(1 - h, 1e-8))^2)
+    sm <- summary(fit)
+    data.frame(
+      p = p,
+      R_Squared = sm$r.squared,
+      Adj_R_Squared = sm$adj.r.squared,
+      MSE = sse / stats::df.residual(fit),
+      Pred_MSE = press / n,
+      Pred_R_Squared = 1 - press / total_ss,
+      Cp = sse / full_mse - (n - 2 * p),
+      AIC = stats::AIC(fit),
+      BIC = stats::BIC(fit),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  mb_all_possible <- function(df, y_name, x_names) {
+    full_fit <- lm(mb_formula(y_name, x_names), data = df)
+    full_sse <- sum(resid(full_fit)^2)
+    full_mse <- full_sse / df.residual(full_fit)
+    y_vec <- df[[y_name]]
+    total_ss <- sum((y_vec - mean(y_vec))^2)
+    n <- nrow(df)
+
+    rows <- list()
+    idx <- 1
+    for (k in seq_along(x_names)) {
+      combos <- combn(x_names, k, simplify = FALSE)
+      for (vars in combos) {
+        fit <- lm(mb_formula(y_name, vars), data = df)
+        met <- mb_model_metrics(fit, full_mse, total_ss, n)
+        rows[[idx]] <- data.frame(
+          Predictor_Count = k,
+          Predictors = paste(vars, collapse = " + "),
+          Formula = paste(y_name, "~", paste(vars, collapse = " + ")),
+          met,
+          stringsAsFactors = FALSE
+        )
+        idx <- idx + 1
+      }
+    }
+    out <- do.call(rbind, rows)
+    out$Cp_minus_p_abs <- abs(out$Cp - out$p)
+    out[order(out$Predictor_Count, out$AIC), , drop = FALSE]
+  }
+
+  mb_pick_best <- function(tbl) {
+    picks <- list(
+      "Minimum MSE" = list(idx = which.min(tbl$MSE), value = "MSE", goal = "Minimize"),
+      "Minimum prediction MSE" = list(idx = which.min(tbl$Pred_MSE), value = "Pred_MSE", goal = "Minimize"),
+      "Maximum adjusted R-squared" = list(idx = which.max(tbl$Adj_R_Squared), value = "Adj_R_Squared", goal = "Maximize"),
+      "Maximum predicted R-squared" = list(idx = which.max(tbl$Pred_R_Squared), value = "Pred_R_Squared", goal = "Maximize"),
+      "Cp closest to p" = list(idx = which.min(tbl$Cp_minus_p_abs), value = "Cp", goal = "Cp near p"),
+      "Minimum AIC" = list(idx = which.min(tbl$AIC), value = "AIC", goal = "Minimize"),
+      "Minimum BIC" = list(idx = which.min(tbl$BIC), value = "BIC", goal = "Minimize")
+    )
+    do.call(rbind, lapply(names(picks), function(nm) {
+      pick <- picks[[nm]]
+      row <- tbl[pick$idx, , drop = FALSE]
+      data.frame(
+        Criterion = nm,
+        Goal = pick$goal,
+        Predictors = row$Predictors,
+        Value = row[[pick$value]],
+        stringsAsFactors = FALSE
+      )
+    }))
+  }
+
+  mb_best_by_size <- function(tbl) {
+    pieces <- split(tbl, tbl$Predictor_Count)
+    do.call(rbind, lapply(pieces, function(x) {
+      x[which.min(x$Cp_minus_p_abs), c(
+        "Predictor_Count", "Predictors", "Adj_R_Squared",
+        "Pred_R_Squared", "MSE", "Cp", "AIC", "BIC"
+      ), drop = FALSE]
+    }))
+  }
+
+  mb_forward_select <- function(df, y_name, x_names, p_enter = 0.10) {
+    selected <- character(0)
+    remaining <- x_names
+    trace <- character(0)
+    steps <- list()
+    add_step <- function(action, predictor, p_value, decision) {
+      steps[[length(steps) + 1]] <<- data.frame(
+        Step = length(steps) + 1,
+        Action = action,
+        Predictor = predictor,
+        P_Value = p_value,
+        Decision = decision,
+        stringsAsFactors = FALSE
+      )
+    }
+    repeat {
+      if (length(remaining) == 0) break
+      pvals <- sapply(remaining, function(v) {
+        reduced <- lm(mb_formula(y_name, selected), data = df)
+        full <- lm(mb_formula(y_name, c(selected, v)), data = df)
+        an <- anova(reduced, full)
+        as.numeric(an$`Pr(>F)`[2])
+      })
+      best <- names(which.min(pvals))
+      best_p <- min(pvals, na.rm = TRUE)
+      if (is.finite(best_p) && best_p <= p_enter) {
+        selected <- c(selected, best)
+        remaining <- setdiff(remaining, best)
+        trace <- c(trace, sprintf("Add %-20s p = %.4f", best, best_p))
+        add_step("Add", best, best_p, "Entered the model")
+      } else {
+        trace <- c(trace, sprintf("Stop: best remaining p = %.4f > p-enter %.4f", best_p, p_enter))
+        add_step("Stop", "No additional predictor", best_p, "Best p-value is above p-enter")
+        break
+      }
+    }
+    step_tbl <- if (length(steps) == 0) {
+      data.frame(Step = integer(0), Action = character(0), Predictor = character(0), P_Value = numeric(0), Decision = character(0))
+    } else {
+      do.call(rbind, steps)
+    }
+    list(selected = selected, trace = trace, steps = step_tbl)
+  }
+
+  mb_backward_select <- function(df, y_name, x_names, p_remove = 0.15) {
+    selected <- x_names
+    trace <- character(0)
+    steps <- list()
+    add_step <- function(action, predictor, p_value, decision) {
+      steps[[length(steps) + 1]] <<- data.frame(
+        Step = length(steps) + 1,
+        Action = action,
+        Predictor = predictor,
+        P_Value = p_value,
+        Decision = decision,
+        stringsAsFactors = FALSE
+      )
+    }
+    repeat {
+      if (length(selected) == 0) break
+      fit <- lm(mb_formula(y_name, selected), data = df)
+      drops <- tryCatch(drop1(fit, test = "F"), error = function(e) NULL)
+      if (is.null(drops) || !("Pr(>F)" %in% names(drops))) break
+      pvals <- drops$`Pr(>F)`
+      names(pvals) <- rownames(drops)
+      pvals <- pvals[setdiff(names(pvals), "<none>")]
+      if (length(pvals) == 0 || all(is.na(pvals))) break
+      worst <- names(which.max(pvals))
+      worst_p <- max(pvals, na.rm = TRUE)
+      if (is.finite(worst_p) && worst_p > p_remove) {
+        selected <- setdiff(selected, worst)
+        trace <- c(trace, sprintf("Remove %-17s p = %.4f", worst, worst_p))
+        add_step("Remove", worst, worst_p, "Removed from the model")
+      } else {
+        trace <- c(trace, sprintf("Stop: largest p = %.4f <= p-remove %.4f", worst_p, p_remove))
+        add_step("Stop", worst, worst_p, "All remaining predictors pass the rule")
+        break
+      }
+    }
+    step_tbl <- if (length(steps) == 0) {
+      data.frame(Step = integer(0), Action = character(0), Predictor = character(0), P_Value = numeric(0), Decision = character(0))
+    } else {
+      do.call(rbind, steps)
+    }
+    list(selected = selected, trace = trace, steps = step_tbl)
+  }
+
+  mb_stepwise_select <- function(df, y_name, x_names, p_enter = 0.10, p_remove = 0.15) {
+    selected <- character(0)
+    trace <- character(0)
+    steps <- list()
+    add_step <- function(action, predictor, p_value, decision) {
+      steps[[length(steps) + 1]] <<- data.frame(
+        Step = length(steps) + 1,
+        Action = action,
+        Predictor = predictor,
+        P_Value = p_value,
+        Decision = decision,
+        stringsAsFactors = FALSE
+      )
+    }
+    repeat {
+      remaining <- setdiff(x_names, selected)
+      changed <- FALSE
+      if (length(remaining) > 0) {
+        pvals <- sapply(remaining, function(v) {
+          reduced <- lm(mb_formula(y_name, selected), data = df)
+          full <- lm(mb_formula(y_name, c(selected, v)), data = df)
+          an <- anova(reduced, full)
+          as.numeric(an$`Pr(>F)`[2])
+        })
+        best <- names(which.min(pvals))
+        best_p <- min(pvals, na.rm = TRUE)
+        if (is.finite(best_p) && best_p <= p_enter) {
+          selected <- c(selected, best)
+          trace <- c(trace, sprintf("Add %-20s p = %.4f", best, best_p))
+          add_step("Add", best, best_p, "Entered the model")
+          changed <- TRUE
+        }
+      }
+      repeat {
+        if (length(selected) == 0) break
+        fit <- lm(mb_formula(y_name, selected), data = df)
+        drops <- tryCatch(drop1(fit, test = "F"), error = function(e) NULL)
+        if (is.null(drops) || !("Pr(>F)" %in% names(drops))) break
+        pvals <- drops$`Pr(>F)`
+        names(pvals) <- rownames(drops)
+        pvals <- pvals[setdiff(names(pvals), "<none>")]
+        if (length(pvals) == 0 || all(is.na(pvals))) break
+        worst <- names(which.max(pvals))
+        worst_p <- max(pvals, na.rm = TRUE)
+        if (is.finite(worst_p) && worst_p > p_remove) {
+          selected <- setdiff(selected, worst)
+          trace <- c(trace, sprintf("Remove %-17s p = %.4f", worst, worst_p))
+          add_step("Remove", worst, worst_p, "Removed after reassessment")
+          changed <- TRUE
+        } else {
+          break
+        }
+      }
+      if (!changed) {
+        trace <- c(trace, "Stop: no variable met the entry/removal rule.")
+        add_step("Stop", "No change", NA_real_, "No variable met the entry/removal rule")
+        break
+      }
+    }
+    step_tbl <- if (length(steps) == 0) {
+      data.frame(Step = integer(0), Action = character(0), Predictor = character(0), P_Value = numeric(0), Decision = character(0))
+    } else {
+      do.call(rbind, steps)
+    }
+    list(selected = selected, trace = trace, steps = step_tbl)
+  }
+
+  mb_hald_path <- function() {
+    candidates <- c(
+      "data/P3_HaldsCement.xlsx",
+      "../Codes&Data/Codes&Data/P3_HaldsCement.xlsx",
+      "d:/KFUPM/T-252/Stat 413/Codes&Data/Codes&Data/P3_HaldsCement.xlsx"
+    )
+    found <- candidates[file.exists(candidates)]
+    if (length(found) == 0) NULL else found[1]
+  }
+
+  observeEvent(input$mbLoadHald, {
+    hald_path <- mb_hald_path()
+    if (is.null(hald_path)) {
+      showNotification("Could not find P3_HaldsCement.xlsx in the expected course folders.", type = "error")
+      return()
+    }
+    hald <- as.data.frame(readxl::read_excel(hald_path), check.names = FALSE)
+    data$raw_base <- hald
+    data$raw <- hald
+    refresh_var_types(data$raw)
+    data$analyzed <- TRUE
+    mb_results(NULL)
+    mb_final_model(NULL)
+    updateTabItems(session, "tabs", selected = "modelbuilding")
+    showNotification("Hald cement data loaded for Topic 10.", type = "message")
+  })
+
+  output$mbYSelect <- renderUI({
+    req(data$numeric_vars)
+    selected <- if ("y" %in% data$numeric_vars) "y" else data$numeric_vars[1]
+    selectInput("mbY", "Response Variable (Y):", choices = data$numeric_vars, selected = selected)
+  })
+
+  output$mbXSelect <- renderUI({
+    req(data$numeric_vars)
+    choices <- setdiff(data$numeric_vars, input$mbY %||% "")
+    selected <- if (all(c("x1", "x2", "x3", "x4") %in% choices)) {
+      c("x1", "x2", "x3", "x4")
+    } else {
+      choices[seq_len(min(4, length(choices)))]
+    }
+    selectizeInput("mbX", "Candidate Predictors:", choices = choices, selected = selected, multiple = TRUE)
+  })
+
+  output$mbFinalXSelect <- renderUI({
+    choices <- input$mbX %||% setdiff(data$numeric_vars, input$mbY %||% "")
+    res <- mb_results()
+    selected <- choices
+    if (!is.null(res) && length(res$stepwise$selected) > 0) selected <- res$stepwise$selected
+    selectizeInput("mbFinalX", "Final model predictors:", choices = choices, selected = selected, multiple = TRUE)
+  })
+
+  observeEvent(input$runMB, {
+    req(data$raw, input$mbY, input$mbX)
+    if (length(input$mbX) < 1) {
+      showNotification("Select at least one candidate predictor.", type = "error")
+      return()
+    }
+    df_mb <- mb_complete_df(data$raw, input$mbY, input$mbX)
+    if (nrow(df_mb) <= length(input$mbX) + 2) {
+      showNotification("Not enough complete rows for this number of predictors.", type = "error")
+      return()
+    }
+    full_fit <- lm(mb_formula(input$mbY, input$mbX), data = df_mb)
+    all_tbl <- mb_all_possible(df_mb, input$mbY, input$mbX)
+    forward <- mb_forward_select(df_mb, input$mbY, input$mbX, input$mbPEnter %||% 0.10)
+    backward <- mb_backward_select(df_mb, input$mbY, input$mbX, input$mbPRemove %||% 0.15)
+    stepwise <- mb_stepwise_select(df_mb, input$mbY, input$mbX, input$mbPEnter %||% 0.10, input$mbPRemove %||% 0.15)
+
+    final_vars <- if (length(stepwise$selected) > 0) stepwise$selected else input$mbX
+    final_fit <- lm(mb_formula(input$mbY, final_vars), data = df_mb)
+
+    mb_results(list(
+      df = df_mb,
+      y_name = input$mbY,
+      x_names = input$mbX,
+      full_fit = full_fit,
+      all_tbl = all_tbl,
+      best_criteria = mb_pick_best(all_tbl),
+      best_by_size = mb_best_by_size(all_tbl),
+      forward = forward,
+      backward = backward,
+      stepwise = stepwise
+    ))
+    mb_final_model(final_fit)
+    showNotification("Model building analysis completed.", type = "message")
+  })
+
+  observeEvent(input$runMBFinal, {
+    req(data$raw, input$mbY, input$mbFinalX)
+    df_mb <- mb_complete_df(data$raw, input$mbY, input$mbFinalX)
+    fit <- lm(mb_formula(input$mbY, input$mbFinalX), data = df_mb)
+    mb_final_model(fit)
+    showNotification("Selected final model fitted.", type = "message")
+  })
+
+  mb_model_stats_ui <- function(fit) {
+    sm <- summary(fit)
+    tags$div(
+      tags$div(
+        class = "mb-metric-grid",
+        tags$div(class = "mb-metric", tags$span("R-squared"), tags$strong(round(sm$r.squared, 4))),
+        tags$div(class = "mb-metric", tags$span("Adjusted R-squared"), tags$strong(round(sm$adj.r.squared, 4))),
+        tags$div(class = "mb-metric", tags$span("Residual MSE"), tags$strong(round(sm$sigma^2, 4))),
+        tags$div(class = "mb-metric", tags$span("Predictors"), tags$strong(length(attr(terms(fit), "term.labels"))))
+      ),
+      tags$div(class = "mb-equation", mb_equation_text(fit))
+    )
+  }
+
+  mb_coef_dt <- function(fit) {
+    coef_tbl <- as.data.frame(coef(summary(fit)))
+    coef_tbl$Term <- rownames(coef_tbl)
+    rownames(coef_tbl) <- NULL
+    names(coef_tbl) <- c("Estimate", "Std_Error", "t_Value", "P_Value", "Term")
+    coef_tbl <- coef_tbl[, c("Term", "Estimate", "Std_Error", "t_Value", "P_Value")]
+    dt <- DT::datatable(
+      coef_tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = nrow(coef_tbl), scrollX = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = c("Estimate", "Std_Error", "t_Value", "P_Value"), digits = 5)
+    DT::formatStyle(
+      dt, "P_Value",
+      color = DT::styleInterval(c(0.05), c("#047857", "#991b1b")),
+      fontWeight = "700"
+    )
+  }
+
+  mb_anova_dt <- function(fit) {
+    an <- as.data.frame(anova(fit))
+    an$Term <- rownames(an)
+    rownames(an) <- NULL
+    an <- an[, c("Term", setdiff(names(an), "Term"))]
+    dt <- DT::datatable(
+      an,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = nrow(an), scrollX = TRUE),
+      class = "compact stripe hover"
+    )
+    DT::formatRound(dt, columns = names(an)[sapply(an, is.numeric)], digits = 5)
+  }
+
+  mb_vif_dt <- function(fit) {
+    vif_vals <- tryCatch(car::vif(fit), error = function(e) NULL)
+    if (is.null(vif_vals)) {
+      tbl <- data.frame(Term = "VIF unavailable", VIF = NA_real_, Level = "N/A")
+    } else {
+      tbl <- data.frame(
+        Term = names(vif_vals),
+        VIF = as.numeric(vif_vals),
+        Level = ifelse(vif_vals > 10, "Severe", ifelse(vif_vals >= 5, "Moderate", "Acceptable")),
+        stringsAsFactors = FALSE
+      )
+    }
+    dt <- DT::datatable(
+      tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = nrow(tbl), scrollX = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = "VIF", digits = 4)
+    DT::formatStyle(
+      dt, "Level",
+      color = "white",
+      fontWeight = "700",
+      backgroundColor = DT::styleEqual(
+        c("Acceptable", "Moderate", "Severe", "N/A"),
+        c("#2563eb", "#f59e0b", "#ef4444", "#6b7280")
+      )
+    )
+  }
+
+  output$mbFullStats <- renderUI({
+    req(mb_results())
+    mb_model_stats_ui(mb_results()$full_fit)
+  })
+
+  output$mbFullCoefTbl <- DT::renderDT({
+    req(mb_results())
+    mb_coef_dt(mb_results()$full_fit)
+  })
+
+  output$mbFullAnovaTbl <- DT::renderDT({
+    req(mb_results())
+    mb_anova_dt(mb_results()$full_fit)
+  })
+
+  output$mbFullVifTbl <- DT::renderDT({
+    req(mb_results())
+    mb_vif_dt(mb_results()$full_fit)
+  })
+
+  output$mbCorrPlot <- renderPlot({
+    req(mb_results())
+    r <- mb_results()
+    M <- stats::cor(r$df[, c(r$y_name, r$x_names), drop = FALSE], use = "pairwise.complete.obs")
+    corrplot::corrplot.mixed(M,
+      lower = "number", upper = "circle",
+      tl.col = "black", tl.cex = 0.8, number.cex = 0.8,
+      mar = c(1, 1, 1, 1)
+    )
+  })
+
+  output$mbVifPlot <- renderPlot({
+    req(mb_results())
+    vif_vals <- tryCatch(car::vif(mb_results()$full_fit), error = function(e) NULL)
+    if (is.null(vif_vals)) {
+      plot.new()
+      text(0.5, 0.5, "VIF unavailable for this model.")
+      return()
+    }
+    vals <- as.numeric(vif_vals)
+    names(vals) <- names(vif_vals)
+    cols <- ifelse(vals > 10, "#ef4444", ifelse(vals >= 5, "#f59e0b", "steelblue"))
+    barplot(vals,
+      col = cols, ylab = "VIF", las = 2,
+      main = "Variance Inflation Factors",
+      ylim = c(0, max(10, vals, na.rm = TRUE) * 1.1)
+    )
+    abline(h = 5, col = "#f59e0b", lty = 2, lwd = 2)
+    abline(h = 10, col = "#ef4444", lty = 2, lwd = 2)
+  })
+
+  output$mbAllModels <- DT::renderDT({
+    req(mb_results())
+    tbl <- mb_results()$all_tbl
+    show_cols <- c(
+      "Predictor_Count", "Predictors", "R_Squared", "Adj_R_Squared",
+      "MSE", "Pred_MSE", "Pred_R_Squared", "Cp", "AIC", "BIC"
+    )
+    dt <- DT::datatable(
+      tbl[, show_cols, drop = FALSE],
+      rownames = FALSE,
+      options = list(pageLength = 10, scrollX = TRUE, autoWidth = TRUE),
+      class = "compact stripe hover"
+    )
+    DT::formatRound(dt,
+      columns = c("R_Squared", "Adj_R_Squared", "MSE", "Pred_MSE", "Pred_R_Squared", "Cp", "AIC", "BIC"),
+      digits = 4
+    )
+  })
+
+  output$mbBestCriteria <- DT::renderDT({
+    req(mb_results())
+    dt <- DT::datatable(
+      mb_results()$best_criteria,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = 8, scrollX = TRUE),
+      class = "compact stripe hover"
+    )
+    DT::formatRound(dt, columns = "Value", digits = 4)
+  })
+
+  output$mbBestBySize <- DT::renderDT({
+    req(mb_results())
+    dt <- DT::datatable(
+      mb_results()$best_by_size,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = 8, scrollX = TRUE),
+      class = "compact stripe hover"
+    )
+    DT::formatRound(dt,
+      columns = c("Adj_R_Squared", "Pred_R_Squared", "MSE", "Cp", "AIC", "BIC"),
+      digits = 4
+    )
+  })
+
+  output$mbCpPlot <- renderPlot({
+    req(mb_results())
+    tbl <- mb_results()$all_tbl
+    plot(tbl$p, tbl$Cp,
+      pch = 19, col = "steelblue",
+      xlab = "p = number of parameters including intercept",
+      ylab = "Mallows Cp",
+      main = "Cp against p"
+    )
+    text(tbl$p, tbl$Cp, labels = tbl$Predictors, pos = 4, cex = 0.7)
+    abline(a = 0, b = 1, col = "red", lwd = 2, lty = 2)
+  })
+
+  output$mbCriteriaPlot <- renderPlot({
+    req(mb_results())
+    tbl <- mb_results()$best_by_size
+    op <- par(mfrow = c(1, 2), mar = c(4, 4, 3, 2))
+    on.exit(par(op))
+    plot(tbl$Predictor_Count, tbl$Adj_R_Squared,
+      type = "b", pch = 19, col = "#2563eb",
+      xlab = "Number of predictors", ylab = "Adjusted R-squared",
+      main = "Best adjusted R-squared by size"
+    )
+    plot(tbl$Predictor_Count, tbl$MSE,
+      type = "b", pch = 19, col = "#16a34a",
+      xlab = "Number of predictors", ylab = "MSE",
+      main = "Best MSE by size"
+    )
+  })
+
+  mb_selection_ui <- function(selection, rule_text) {
+    steps <- selection$steps
+    selected <- selection$selected
+    final_text <- if (length(selected) == 0) "Intercept only" else paste(selected, collapse = " + ")
+
+    if (is.null(steps) || nrow(steps) == 0) {
+      step_tags <- tags$div(class = "hint-text", "No steps were recorded for this procedure.")
+    } else {
+      step_tags <- lapply(seq_len(nrow(steps)), function(i) {
+        row <- steps[i, ]
+        action_class <- switch(tolower(row$Action),
+          add = "mb-action-add",
+          remove = "mb-action-remove",
+          stop = "mb-action-stop",
+          "mb-action-stop"
+        )
+        p_txt <- if (is.na(row$P_Value)) "" else paste0("p = ", formatC(row$P_Value, format = "f", digits = 4))
+        tags$div(
+          class = "mb-step-row",
+          tags$div(class = "mb-step-num", row$Step),
+          tags$div(class = paste("mb-action", action_class), row$Action),
+          tags$div(
+            tags$div(class = "mb-step-predictor", htmltools::htmlEscape(row$Predictor)),
+            tags$div(class = "hint-text", htmltools::htmlEscape(row$Decision))
+          ),
+          tags$div(class = "mb-step-p", p_txt)
+        )
+      })
+    }
+
+    tags$div(
+      tags$div(class = "mb-rule-row", tags$span(class = "mb-pill", icon("filter"), rule_text)),
+      tags$div(class = "mb-step-list", step_tags),
+      tags$div(class = "mb-final-chip", tagList(icon("check"), " Final predictors: ", final_text))
+    )
+  }
+
+  output$mbForwardTrace <- renderUI({
+    req(mb_results())
+    mb_selection_ui(mb_results()$forward, paste0("p-enter = ", input$mbPEnter %||% 0.10))
+  })
+
+  output$mbBackwardTrace <- renderUI({
+    req(mb_results())
+    mb_selection_ui(mb_results()$backward, paste0("p-remove = ", input$mbPRemove %||% 0.15))
+  })
+
+  output$mbStepwiseTrace <- renderUI({
+    req(mb_results())
+    mb_selection_ui(
+      mb_results()$stepwise,
+      paste0("p-enter = ", input$mbPEnter %||% 0.10, " | p-remove = ", input$mbPRemove %||% 0.15)
+    )
+  })
+
+  mb_equation_text <- function(fit, digits = 4) {
+    coefs <- stats::coef(fit)
+    response <- as.character(formula(fit))[2]
+    pieces <- sprintf("%.*f", digits, coefs[[1]])
+    if (length(coefs) > 1) {
+      term_names <- names(coefs)[-1]
+      term_vals <- coefs[-1]
+      term_pieces <- vapply(seq_along(term_vals), function(i) {
+        sign <- if (term_vals[[i]] >= 0) "+" else "-"
+        sprintf(" %s %.*f(%s)", sign, digits, abs(term_vals[[i]]), term_names[[i]])
+      }, character(1))
+      pieces <- paste0(pieces, paste(term_pieces, collapse = ""))
+    }
+    paste(response, "=", pieces)
+  }
+
+  output$mbFinalStats <- renderUI({
+    req(mb_final_model())
+    fit <- mb_final_model()
+    sm <- summary(fit)
+    tags$div(
+      tags$div(
+        class = "mb-metric-grid",
+        tags$div(class = "mb-metric", tags$span("R-squared"), tags$strong(round(sm$r.squared, 4))),
+        tags$div(class = "mb-metric", tags$span("Adjusted R-squared"), tags$strong(round(sm$adj.r.squared, 4))),
+        tags$div(class = "mb-metric", tags$span("Residual MSE"), tags$strong(round(sm$sigma^2, 4))),
+        tags$div(class = "mb-metric", tags$span("Predictors"), tags$strong(length(attr(terms(fit), "term.labels"))))
+      ),
+      tags$div(class = "mb-equation", mb_equation_text(fit))
+    )
+  })
+
+  output$mbFinalCoefTbl <- DT::renderDT({
+    req(mb_final_model())
+    fit <- mb_final_model()
+    coef_tbl <- as.data.frame(coef(summary(fit)))
+    coef_tbl$Term <- rownames(coef_tbl)
+    rownames(coef_tbl) <- NULL
+    names(coef_tbl) <- c("Estimate", "Std_Error", "t_Value", "P_Value", "Term")
+    coef_tbl <- coef_tbl[, c("Term", "Estimate", "Std_Error", "t_Value", "P_Value")]
+    dt <- DT::datatable(
+      coef_tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = nrow(coef_tbl), scrollX = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = c("Estimate", "Std_Error", "t_Value", "P_Value"), digits = 5)
+    DT::formatStyle(
+      dt, "P_Value",
+      color = DT::styleInterval(c(0.05), c("#047857", "#991b1b")),
+      fontWeight = "700"
+    )
+  })
+
+  output$mbFinalAnovaTbl <- DT::renderDT({
+    req(mb_final_model())
+    an <- as.data.frame(anova(mb_final_model()))
+    an$Term <- rownames(an)
+    rownames(an) <- NULL
+    an <- an[, c("Term", setdiff(names(an), "Term"))]
+    dt <- DT::datatable(
+      an,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = nrow(an), scrollX = TRUE),
+      class = "compact stripe hover"
+    )
+    DT::formatRound(dt, columns = names(an)[sapply(an, is.numeric)], digits = 5)
+  })
+
+  output$mbFinalVifTbl <- DT::renderDT({
+    req(mb_final_model())
+    fit <- mb_final_model()
+    vif_vals <- tryCatch(car::vif(fit), error = function(e) NULL)
+    if (is.null(vif_vals)) {
+      tbl <- data.frame(Term = "VIF unavailable", VIF = NA_real_, Level = "N/A")
+    } else {
+      tbl <- data.frame(
+        Term = names(vif_vals),
+        VIF = as.numeric(vif_vals),
+        Level = ifelse(vif_vals > 10, "Severe", ifelse(vif_vals >= 5, "Moderate", "Acceptable")),
+        stringsAsFactors = FALSE
+      )
+    }
+    dt <- DT::datatable(
+      tbl,
+      rownames = FALSE,
+      options = list(dom = "t", pageLength = nrow(tbl), scrollX = TRUE),
+      class = "compact stripe hover"
+    )
+    dt <- DT::formatRound(dt, columns = "VIF", digits = 4)
+    DT::formatStyle(
+      dt, "Level",
+      color = "white",
+      fontWeight = "700",
+      backgroundColor = DT::styleEqual(
+        c("Acceptable", "Moderate", "Severe", "N/A"),
+        c("#2563eb", "#f59e0b", "#ef4444", "#6b7280")
+      )
+    )
+  })
+
+  output$mbInterpretation <- renderUI({
+    req(mb_results(), mb_final_model())
+    r <- mb_results()
+    fit <- mb_final_model()
+    sm <- summary(fit)
+    final_terms <- attr(terms(fit), "term.labels")
+    rec <- r$best_criteria
+    common <- sort(table(rec$Predictors), decreasing = TRUE)
+    consensus <- names(common)[1]
+    tags$div(
+      style = "line-height:1.65;",
+      tags$p(tags$b("Selected model: "), paste(final_terms, collapse = " + ")),
+      tags$p(tags$b("Adjusted R-squared: "), round(sm$adj.r.squared, 4)),
+      tags$p(tags$b("Residual MSE: "), round(sm$sigma^2, 4)),
+      tags$p(tags$b("Most common criterion winner: "), consensus),
+      tags$hr(),
+      tags$p("Chapter caution: use the algorithm as a guide, then check subject knowledge, coefficient stability, multicollinearity, and residual diagnostics before declaring a final model.")
+    )
+  })
+
+  output$mbFinalDiagnostics <- renderPlot({
+    req(mb_final_model())
+    fit <- mb_final_model()
+    op <- par(mfrow = c(1, 3), mar = c(4, 4, 3, 2))
+    on.exit(par(op))
+    plot(fitted(fit), resid(fit),
+      pch = 19, col = "steelblue",
+      xlab = "Fitted values", ylab = "Residuals",
+      main = "Residuals vs Fitted"
+    )
+    abline(h = 0, col = "red", lwd = 2)
+    qqnorm(resid(fit), pch = 19, col = "steelblue", main = "Normal QQ Plot")
+    qqline(resid(fit), col = "red", lwd = 2)
+    plot(seq_along(resid(fit)), resid(fit),
+      type = "b", pch = 19, col = "steelblue",
+      xlab = "Observation order", ylab = "Residuals",
+      main = "Residuals vs Order"
+    )
+    abline(h = 0, col = "red", lwd = 2)
   })
 
   # ===== INDICATOR VARIABLE SERVER =====
@@ -4011,8 +6311,9 @@ server <- function(input, output, session) {
   output$cleanLogVarsUI <- renderUI({
     req(data$numeric_vars)
     selectizeInput("cleanLogVars", "Log Transform Numeric Vars:",
-                   choices = data$numeric_vars, multiple = TRUE,
-                   options = list(placeholder = "Optional"))
+      choices = data$numeric_vars, multiple = TRUE,
+      options = list(placeholder = "Optional")
+    )
   })
 
   observeEvent(input$applyCleaning, {
@@ -4020,9 +6321,10 @@ server <- function(input, output, session) {
     withProgress(message = "Applying data cleaning...", value = 0, {
       incProgress(0.4)
       data$raw <- apply_cleaning_pipeline(data$raw_base,
-                                          missing_mode = input$cleanMissing %||% "keep",
-                                          outlier_mode = input$cleanOutliers %||% "remove",
-                                          log_vars = input$cleanLogVars %||% NULL)
+        missing_mode = input$cleanMissing %||% "keep",
+        outlier_mode = input$cleanOutliers %||% "remove",
+        log_vars = input$cleanLogVars %||% NULL
+      )
       incProgress(0.4)
       refresh_var_types(data$raw)
       data$analyzed <- TRUE
@@ -4034,8 +6336,9 @@ server <- function(input, output, session) {
   output$globalVarSearchUI <- renderUI({
     all_vars <- c(data$numeric_vars, data$categorical_vars)
     selectizeInput("globalVarSearch", "Global Variable Search:",
-                   choices = all_vars, multiple = FALSE,
-                   options = list(placeholder = "Find variable"))
+      choices = all_vars, multiple = FALSE,
+      options = list(placeholder = "Find variable")
+    )
   })
 
   observeEvent(input$globalVarSearch, {
@@ -4054,17 +6357,21 @@ server <- function(input, output, session) {
     showNotification(paste("Jumped to variable:", var_selected), type = "message", duration = 2)
   })
 
-  observeEvent(input$darkModeToggle, {
-    session$sendCustomMessage("setDarkMode", list(enabled = isTRUE(input$darkModeToggle)))
-  }, ignoreInit = TRUE)
+  observeEvent(input$darkModeToggle,
+    {
+      session$sendCustomMessage("setDarkMode", list(enabled = isTRUE(input$darkModeToggle)))
+    },
+    ignoreInit = TRUE
+  )
 
   # Quick actions
   observeEvent(input$qaSample, {
     data$raw_base <- default_data
     data$raw <- apply_cleaning_pipeline(data$raw_base,
-                                        missing_mode = input$cleanMissing %||% "keep",
-                                        outlier_mode = input$cleanOutliers %||% "remove",
-                                        log_vars = input$cleanLogVars %||% NULL)
+      missing_mode = input$cleanMissing %||% "keep",
+      outlier_mode = input$cleanOutliers %||% "remove",
+      log_vars = input$cleanLogVars %||% NULL
+    )
     refresh_var_types(data$raw)
     data$analyzed <- TRUE
     updateTabItems(session, "tabs", selected = "preview")
@@ -4143,7 +6450,9 @@ server <- function(input, output, session) {
   # Non-blocking onboarding message (version-compatible one-time pattern)
   onboarding_shown <- reactiveVal(FALSE)
   observe({
-    if (isTRUE(onboarding_shown())) return()
+    if (isTRUE(onboarding_shown())) {
+      return()
+    }
     onboarding_shown(TRUE)
     showNotification(
       "Welcome! Use Quick Actions, Global Search, and Data Cleaning from the top panel.",
@@ -4155,8 +6464,9 @@ server <- function(input, output, session) {
   output$indXSelect <- renderUI({
     req(data$numeric_vars)
     selectInput("indX", "Numeric X (optional):",
-                choices = c("None (group means only)" = "__none__", data$numeric_vars),
-                selected = "__none__")
+      choices = c("None (group means only)" = "__none__", data$numeric_vars),
+      selected = "__none__"
+    )
   })
 
   output$indRefSelect <- renderUI({
@@ -4173,9 +6483,9 @@ server <- function(input, output, session) {
     selectInput("indRef2", "Reference level 2:", choices = lvls, selected = lvls[1])
   })
 
-  ind_model   <- reactiveVal(NULL)
+  ind_model <- reactiveVal(NULL)
   ind_reduced <- reactiveVal(NULL)
-  ind_data    <- reactiveVal(NULL)
+  ind_data <- reactiveVal(NULL)
 
   observeEvent(input$runIndicator, {
     req(data$raw, input$indY, input$indFactor, input$indRef)
@@ -4254,11 +6564,15 @@ server <- function(input, output, session) {
     fit_reduced <- if (!use_f2) {
       if (use_x) {
         if (isTRUE(input$indInteraction)) lm(y ~ x + f1, data = df) else lm(y ~ x, data = df)
-      } else lm(y ~ 1, data = df)
+      } else {
+        lm(y ~ 1, data = df)
+      }
     } else {
       if (use_x) {
         if (isTRUE(input$indInteraction)) lm(y ~ x + f1 + f2, data = df) else lm(y ~ x, data = df)
-      } else lm(y ~ 1, data = df)
+      } else {
+        lm(y ~ 1, data = df)
+      }
     }
     ind_reduced(fit_reduced)
 
@@ -4323,17 +6637,19 @@ server <- function(input, output, session) {
         lv2 <- levels(df$f2)
         cat("Fitted equations by (Factor1, Factor2) combinations:\n")
         cat(strrep("=", 55), "\n\n")
-        for (a in lv1) for (b in lv2) {
-          if (use_x) {
-            new0 <- data.frame(x = 0, f1 = factor(a, levels = lv1), f2 = factor(b, levels = lv2))
-            new1 <- data.frame(x = 1, f1 = factor(a, levels = lv1), f2 = factor(b, levels = lv2))
-            b0 <- as.numeric(predict(fit, newdata = new0))
-            b1 <- as.numeric(predict(fit, newdata = new1)) - b0
-            cat(sprintf("(%s, %s): y = %.4f + %.4f*x\n", a, b, b0, b1))
-          } else {
-            new0 <- data.frame(f1 = factor(a, levels = lv1), f2 = factor(b, levels = lv2))
-            m <- as.numeric(predict(fit, newdata = new0))
-            cat(sprintf("(%s, %s): y = %.4f\n", a, b, m))
+        for (a in lv1) {
+          for (b in lv2) {
+            if (use_x) {
+              new0 <- data.frame(x = 0, f1 = factor(a, levels = lv1), f2 = factor(b, levels = lv2))
+              new1 <- data.frame(x = 1, f1 = factor(a, levels = lv1), f2 = factor(b, levels = lv2))
+              b0 <- as.numeric(predict(fit, newdata = new0))
+              b1 <- as.numeric(predict(fit, newdata = new1)) - b0
+              cat(sprintf("(%s, %s): y = %.4f + %.4f*x\n", a, b, b0, b1))
+            } else {
+              new0 <- data.frame(f1 = factor(a, levels = lv1), f2 = factor(b, levels = lv2))
+              m <- as.numeric(predict(fit, newdata = new0))
+              cat(sprintf("(%s, %s): y = %.4f\n", a, b, m))
+            }
           }
         }
       }
@@ -4345,18 +6661,21 @@ server <- function(input, output, session) {
         grp <- as.factor(grp)
         cols <- setNames(rainbow(nlevels(grp)), levels(grp))
         plot(df$x, df$y,
-             xlab = input$indX, ylab = input$indY,
-             main = "Indicator Variable Fit",
-             pch = 19, col = cols[as.character(grp)])
+          xlab = input$indX, ylab = input$indY,
+          main = "Indicator Variable Fit",
+          pch = 19, col = cols[as.character(grp)]
+        )
         x_grid <- seq(min(df$x, na.rm = TRUE), max(df$x, na.rm = TRUE), length.out = 120)
         for (g in levels(grp)) {
           idx <- as.character(grp) == g
           if (!any(idx)) next
           if (use_f2) {
             vals <- strsplit(g, " \\| ")[[1]]
-            new_df <- data.frame(x = x_grid,
-                                 f1 = factor(vals[1], levels = levels(df$f1)),
-                                 f2 = factor(vals[2], levels = levels(df$f2)))
+            new_df <- data.frame(
+              x = x_grid,
+              f1 = factor(vals[1], levels = levels(df$f1)),
+              f2 = factor(vals[2], levels = levels(df$f2))
+            )
           } else {
             new_df <- data.frame(x = x_grid, f1 = factor(g, levels = levels(df$f1)))
           }
@@ -4367,11 +6686,12 @@ server <- function(input, output, session) {
       } else {
         grp <- if (use_f2) interaction(df$f1, df$f2, sep = " | ") else df$f1
         boxplot(df$y ~ grp,
-                col = "lightblue", border = "steelblue",
-                xlab = if (use_f2) "Factor 1 | Factor 2" else input$indFactor,
-                ylab = input$indY,
-                main = "Indicator Variable Model (Group Means)",
-                las = 2)
+          col = "lightblue", border = "steelblue",
+          xlab = if (use_f2) "Factor 1 | Factor 2" else input$indFactor,
+          ylab = input$indY,
+          main = "Indicator Variable Model (Group Means)",
+          las = 2
+        )
       }
     })
 
@@ -4379,8 +6699,10 @@ server <- function(input, output, session) {
       p_base <- if (!use_f2) {
         paste0("One factor selected: ", nlevels(df$f1) - 1, " dummy variable(s) created for Factor 1.")
       } else {
-        paste0("Two factors selected: ", nlevels(df$f1) - 1, " dummy variable(s) for Factor 1 and ",
-               nlevels(df$f2) - 1, " for Factor 2.")
+        paste0(
+          "Two factors selected: ", nlevels(df$f1) - 1, " dummy variable(s) for Factor 1 and ",
+          nlevels(df$f2) - 1, " for Factor 2."
+        )
       }
       p_shape <- if (use_x && isTRUE(input$indInteraction)) {
         "Interaction with X is included, so slopes can vary by factor level(s)."
@@ -4403,11 +6725,15 @@ server <- function(input, output, session) {
   output$maXHint <- renderUI({
     req(data$numeric_vars)
     if (input$maModelType == "slr") {
-      tags$p(class="hint-text",
-             icon("info-circle"), " Uses the SLR model fitted in the SLR tab.")
+      tags$p(
+        class = "hint-text",
+        icon("info-circle"), " Uses the SLR model fitted in the SLR tab."
+      )
     } else {
-      tags$p(class="hint-text",
-             icon("info-circle"), " Uses the MLR model fitted in the MLR tab.")
+      tags$p(
+        class = "hint-text",
+        icon("info-circle"), " Uses the MLR model fitted in the MLR tab."
+      )
     }
   })
 
@@ -4418,7 +6744,7 @@ server <- function(input, output, session) {
 
     ei <- resid(mod)
     ti <- MASS::studres(mod)
-    n  <- length(ei)
+    n <- length(ei)
 
     # Residual table
     output$maResidTable <- DT::renderDT({
@@ -4438,10 +6764,14 @@ server <- function(input, output, session) {
     # --- Normality ---
     output$maQQPlot <- renderPlot({
       par(mfrow = c(1, 2), mar = c(4, 4, 3, 2))
-      car::qqPlot(ei, main = "QQ Plot (Raw Residuals)",
-                  ylab = "Residuals", col = "steelblue", col.lines = "red")
-      car::qqPlot(ti, main = "QQ Plot (Studentised Residuals)",
-                  ylab = "Studentised Residuals", col = "darkorange", col.lines = "red")
+      car::qqPlot(ei,
+        main = "QQ Plot (Raw Residuals)",
+        ylab = "Residuals", col = "steelblue", col.lines = "red"
+      )
+      car::qqPlot(ti,
+        main = "QQ Plot (Studentised Residuals)",
+        ylab = "Studentised Residuals", col = "darkorange", col.lines = "red"
+      )
     })
 
     output$maShapiro <- renderPrint({
@@ -4461,14 +6791,16 @@ server <- function(input, output, session) {
     output$maResFitted <- renderPlot({
       par(mfrow = c(1, 2), mar = c(4, 4, 3, 2))
       plot(fitted(mod), ei,
-           xlab = "Fitted values", ylab = "Residuals",
-           main = "(a) Residuals vs Fitted",
-           col = "steelblue", pch = 19)
+        xlab = "Fitted values", ylab = "Residuals",
+        main = "(a) Residuals vs Fitted",
+        col = "steelblue", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
       plot(fitted(mod), ti,
-           xlab = "Fitted values", ylab = "Studentised Residuals",
-           main = "(b) Studentised Residuals vs Fitted",
-           col = "darkorange", pch = 19)
+        xlab = "Fitted values", ylab = "Studentised Residuals",
+        main = "(b) Studentised Residuals vs Fitted",
+        col = "darkorange", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
       abline(h = c(-2, 2), col = "grey50", lty = 2)
     })
@@ -4490,14 +6822,16 @@ server <- function(input, output, session) {
     output$maResOrder <- renderPlot({
       par(mfrow = c(1, 2), mar = c(4, 4, 3, 2))
       plot(seq_len(n), ei,
-           type = "o", pch = 19, col = "steelblue",
-           xlab = "Observation Order", ylab = "Residuals",
-           main = "(a) Residuals vs Order")
+        type = "o", pch = 19, col = "steelblue",
+        xlab = "Observation Order", ylab = "Residuals",
+        main = "(a) Residuals vs Order"
+      )
       abline(h = 0, col = "red", lwd = 2)
       plot(seq_len(n), ti,
-           type = "o", pch = 19, col = "darkorange",
-           xlab = "Observation Order", ylab = "Studentised Residuals",
-           main = "(b) Studentised vs Order")
+        type = "o", pch = 19, col = "darkorange",
+        xlab = "Observation Order", ylab = "Studentised Residuals",
+        main = "(b) Studentised vs Order"
+      )
       abline(h = 0, col = "red", lwd = 2)
     })
 
@@ -4517,13 +6851,16 @@ server <- function(input, output, session) {
     # --- Added-variable plots ---
     output$maAVPlots <- renderPlot({
       tryCatch(
-        car::avPlots(mod, main = "Added-Variable (Partial Regression) Plots",
-                     col = "steelblue", col.lines = "red", pch = 19),
+        car::avPlots(mod,
+          main = "Added-Variable (Partial Regression) Plots",
+          col = "steelblue", col.lines = "red", pch = 19
+        ),
         error = function(e) {
           plot.new()
           text(0.5, 0.5,
-               paste("Added-variable plots require >= 2 predictors.\n", e$message),
-               cex = 1.2)
+            paste("Added-variable plots require >= 2 predictors.\n", e$message),
+            cex = 1.2
+          )
         }
       )
     })
@@ -4537,20 +6874,23 @@ server <- function(input, output, session) {
         cat("Install it with: install.packages('EnvStats')\n")
         return(invisible(NULL))
       }
-      tryCatch({
-        # Re-extract x and y from the model
-        mf <- model.frame(mod)
-        y_lof <- mf[[1]]
-        x_lof <- mf[[2]]
-        lof_mod <- lm(y_lof ~ x_lof)
-        print(EnvStats::anovaPE(lof_mod))
-        cat("\nNote: This test requires replicate X values.\n")
-        cat("If X values are all unique, the test cannot be performed.\n")
-      }, error = function(e) {
-        cat("Lack-of-fit test could not be completed:\n")
-        cat(e$message, "\n")
-        cat("\nThis test requires replicate X values in your dataset.\n")
-      })
+      tryCatch(
+        {
+          # Re-extract x and y from the model
+          mf <- model.frame(mod)
+          y_lof <- mf[[1]]
+          x_lof <- mf[[2]]
+          lof_mod <- lm(y_lof ~ x_lof)
+          print(EnvStats::anovaPE(lof_mod))
+          cat("\nNote: This test requires replicate X values.\n")
+          cat("If X values are all unique, the test cannot be performed.\n")
+        },
+        error = function(e) {
+          cat("Lack-of-fit test could not be completed:\n")
+          cat(e$message, "\n")
+          cat("\nThis test requires replicate X values in your dataset.\n")
+        }
+      )
     })
   })
 
@@ -4566,9 +6906,9 @@ server <- function(input, output, session) {
     selectInput("btX", "Predictor Variable (x):", choices = data$numeric_vars)
   })
 
-  bt_orig_model  <- reactiveVal(NULL)
+  bt_orig_model <- reactiveVal(NULL)
   bt_trans_model <- reactiveVal(NULL)
-  bt_info        <- reactiveVal(list())
+  bt_info <- reactiveVal(list())
 
   observeEvent(input$runBT, {
     req(data$raw, input$btY, input$btX)
@@ -4580,27 +6920,30 @@ server <- function(input, output, session) {
     if (input$btMethod == "boxcox" && any(y_bt <= 0, na.rm = TRUE)) {
       showNotification(
         "Box-Cox requires all Y values to be strictly positive. Please choose a different Y.",
-        type = "error", duration = 6)
+        type = "error", duration = 6
+      )
       return()
     }
     # Check X > 0 for Box-Tidwell
     if (input$btMethod == "boxtidwell" && any(x_bt <= 0, na.rm = TRUE)) {
       showNotification(
         "Box-Tidwell requires all X values to be strictly positive. Please choose a different X.",
-        type = "error", duration = 6)
+        type = "error", duration = 6
+      )
       return()
     }
 
-    df_bt    <- data.frame(y = y_bt, x = x_bt)
+    df_bt <- data.frame(y = y_bt, x = x_bt)
     mod_orig <- lm(y ~ x, data = df_bt)
     bt_orig_model(mod_orig)
 
     # --- Original model outputs ---
     output$btOrigScatter <- renderPlot({
       plot(x_bt, y_bt,
-           pch = 21, cex = 1, col = "steelblue",
-           xlab = input$btX, ylab = input$btY,
-           main = paste("Original Data:", input$btY, "vs", input$btX))
+        pch = 21, cex = 1, col = "steelblue",
+        xlab = input$btX, ylab = input$btY,
+        main = paste("Original Data:", input$btY, "vs", input$btX)
+      )
       abline(mod_orig, col = "red", lwd = 2)
     })
 
@@ -4612,9 +6955,10 @@ server <- function(input, output, session) {
 
     output$btOrigResid <- renderPlot({
       plot(fitted(mod_orig), resid(mod_orig),
-           xlab = "Fitted values", ylab = "Residuals",
-           main = "Residuals vs Fitted (Original)",
-           col = "steelblue", pch = 19)
+        xlab = "Fitted values", ylab = "Residuals",
+        main = "Residuals vs Fitted (Original)",
+        col = "steelblue", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
       lines(lowess(fitted(mod_orig), resid(mod_orig)), col = "blue", lwd = 2, lty = 2)
     })
@@ -4630,22 +6974,31 @@ server <- function(input, output, session) {
     if (input$btMethod == "boxcox") {
       # Box-Cox: use formula + explicit data frame so MASS::boxcox never needs
       # to look up 'df_bt' by name in an outer environment (which fails in Shiny).
-      bcox        <- MASS::boxcox(y_bt ~ x_bt, lambda = seq(-2, 2, 0.001), plotit = FALSE)
-      lambda_opt  <- bcox$x[which.max(bcox$y)]
-      bt_info(list(method = "boxcox", param = lambda_opt,
-                   param_name = "lambda", x = bcox$x, y = bcox$y))
+      bcox <- MASS::boxcox(y_bt ~ x_bt, lambda = seq(-2, 2, 0.001), plotit = FALSE)
+      lambda_opt <- bcox$x[which.max(bcox$y)]
+      bt_info(list(
+        method = "boxcox", param = lambda_opt,
+        param_name = "lambda", x = bcox$x, y = bcox$y
+      ))
 
       output$btLambdaPlot <- renderPlot({
-        plot(bcox$x, bcox$y, type = "l", lwd = 2, col = "steelblue",
-             xlab = expression(lambda), ylab = "Log-Likelihood",
-             main = "Box-Cox Log-Likelihood Profile")
+        plot(bcox$x, bcox$y,
+          type = "l", lwd = 2, col = "steelblue",
+          xlab = expression(lambda), ylab = "Log-Likelihood",
+          main = "Box-Cox Log-Likelihood Profile"
+        )
         abline(v = lambda_opt, col = "red", lwd = 2, lty = 2)
-        abline(h = max(bcox$y) - qchisq(0.95, 1) / 2,
-               col = "grey50", lty = 3, lwd = 1.5)
+        abline(
+          h = max(bcox$y) - qchisq(0.95, 1) / 2,
+          col = "grey50", lty = 3, lwd = 1.5
+        )
         legend("bottomright",
-               legend = c(paste("Optimal lambda =", round(lambda_opt, 3)),
-                          "95% CI threshold"),
-               col = c("red", "grey50"), lty = c(2, 3), lwd = 2, bty = "n")
+          legend = c(
+            paste("Optimal lambda =", round(lambda_opt, 3)),
+            "95% CI threshold"
+          ),
+          col = c("red", "grey50"), lty = c(2, 3), lwd = 2, bty = "n"
+        )
       })
 
       output$btOptimal <- renderPrint({
@@ -4663,34 +7016,38 @@ server <- function(input, output, session) {
         }
         # 95% confidence interval for lambda
         ci_threshold <- max(bcox$y) - qchisq(0.95, 1) / 2
-        ci_idx  <- bcox$y >= ci_threshold
-        cat("\n95% CI for lambda: [",
-            round(min(bcox$x[ci_idx]), 3), ",",
-            round(max(bcox$x[ci_idx]), 3), "]\n")
+        ci_idx <- bcox$y >= ci_threshold
+        cat(
+          "\n95% CI for lambda: [",
+          round(min(bcox$x[ci_idx]), 3), ",",
+          round(max(bcox$x[ci_idx]), 3), "]\n"
+        )
       })
 
       # Transformed model (Y^lambda)
-      y_trans  <- if (abs(lambda_opt) < 0.001) log(y_bt) else y_bt^lambda_opt
+      y_trans <- if (abs(lambda_opt) < 0.001) log(y_bt) else y_bt^lambda_opt
       df_trans <- data.frame(y_trans = y_trans, x = x_bt)
       mod_trans <- lm(y_trans ~ x, data = df_trans)
       bt_trans_model(mod_trans)
-
     } else {
       # Box-Tidwell: find optimal alpha
-      bt_result   <- tryCatch(
+      bt_result <- tryCatch(
         car::boxTidwell(y ~ x, data = df_bt),
         error = function(e) NULL
       )
 
       if (is.null(bt_result)) {
         showNotification("Box-Tidwell did not converge. Try different variables.",
-                         type = "warning")
+          type = "warning"
+        )
         return()
       }
 
       alpha_opt <- bt_result$result[1, "MLE of lambda"]
-      bt_info(list(method = "boxtidwell", param = alpha_opt,
-                   param_name = "alpha", bt_obj = bt_result))
+      bt_info(list(
+        method = "boxtidwell", param = alpha_opt,
+        param_name = "alpha", bt_obj = bt_result
+      ))
 
       output$btLambdaPlot <- renderPlot({
         # Box-Tidwell doesn't produce a profile plot; show reciprocal transform
@@ -4699,19 +7056,24 @@ server <- function(input, output, session) {
         # Approximate residual log-lik proxy: SS from a grid of transformed models
         ss_vec <- sapply(alpha_seq, function(a) {
           xt <- tryCatch(x_bt^a, error = function(e) rep(NA, length(x_bt)))
-          if (any(!is.finite(xt))) return(NA_real_)
-          m  <- lm(y_bt ~ xt)
+          if (any(!is.finite(xt))) {
+            return(NA_real_)
+          }
+          m <- lm(y_bt ~ xt)
           sum(resid(m)^2)
         })
         ss_vec[!is.finite(ss_vec)] <- NA
-        plot(alpha_seq, -ss_vec, type = "l", lwd = 2, col = "steelblue",
-             xlab = expression(alpha),
-             ylab = "-Residual SS (proxy for log-likelihood)",
-             main = "Box-Tidwell Power Profile", na.action = na.omit)
+        plot(alpha_seq, -ss_vec,
+          type = "l", lwd = 2, col = "steelblue",
+          xlab = expression(alpha),
+          ylab = "-Residual SS (proxy for log-likelihood)",
+          main = "Box-Tidwell Power Profile", na.action = na.omit
+        )
         abline(v = alpha_opt, col = "red", lwd = 2, lty = 2)
         legend("bottomright",
-               legend = paste("Optimal alpha =", round(alpha_opt, 3)),
-               col = "red", lty = 2, lwd = 2, bty = "n")
+          legend = paste("Optimal alpha =", round(alpha_opt, 3)),
+          col = "red", lty = 2, lwd = 2, bty = "n"
+        )
       })
 
       output$btOptimal <- renderPrint({
@@ -4723,7 +7085,7 @@ server <- function(input, output, session) {
       })
 
       # Transformed model (X^alpha)
-      x_trans  <- x_bt^alpha_opt
+      x_trans <- x_bt^alpha_opt
       df_trans <- data.frame(y = y_bt, x_trans = x_trans)
       mod_trans <- lm(y ~ x_trans, data = df_trans)
       bt_trans_model(mod_trans)
@@ -4734,19 +7096,28 @@ server <- function(input, output, session) {
 
     output$btTransScatter <- renderPlot({
       mf_t <- model.frame(mod_t)
-      x_t  <- mf_t[[2]]
-      y_t  <- mf_t[[1]]
+      x_t <- mf_t[[2]]
+      y_t <- mf_t[[1]]
       info <- bt_info()
-      x_lab <- if (info$method == "boxcox") input$btX else
-                  paste0(input$btX, "^", round(info$param, 3))
+      x_lab <- if (info$method == "boxcox") {
+        input$btX
+      } else {
+        paste0(input$btX, "^", round(info$param, 3))
+      }
       y_lab <- if (info$method == "boxcox") {
-        if (abs(info$param) < 0.001) paste0("log(", input$btY, ")")
-        else paste0(input$btY, "^", round(info$param, 3))
-      } else input$btY
+        if (abs(info$param) < 0.001) {
+          paste0("log(", input$btY, ")")
+        } else {
+          paste0(input$btY, "^", round(info$param, 3))
+        }
+      } else {
+        input$btY
+      }
       plot(x_t, y_t,
-           pch = 21, cex = 1, col = "darkorange",
-           xlab = x_lab, ylab = y_lab,
-           main = "Transformed Data with Fit")
+        pch = 21, cex = 1, col = "darkorange",
+        xlab = x_lab, ylab = y_lab,
+        main = "Transformed Data with Fit"
+      )
       abline(mod_t, col = "red", lwd = 2)
     })
 
@@ -4758,9 +7129,10 @@ server <- function(input, output, session) {
 
     output$btTransResid <- renderPlot({
       plot(fitted(mod_t), resid(mod_t),
-           xlab = "Fitted values", ylab = "Residuals",
-           main = "Residuals vs Fitted (Transformed)",
-           col = "darkorange", pch = 19)
+        xlab = "Fitted values", ylab = "Residuals",
+        main = "Residuals vs Fitted (Transformed)",
+        col = "darkorange", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
       lines(lowess(fitted(mod_t), resid(mod_t)), col = "blue", lwd = 2, lty = 2)
     })
@@ -4769,8 +7141,12 @@ server <- function(input, output, session) {
       cat("Breusch-Pagan Test (Transformed)\n")
       cat(strrep("=", 35), "\n\n")
       bp <- tryCatch(lmtest::bptest(mod_t),
-                     error = function(e) NULL)
-      if (is.null(bp)) { cat("Could not compute BP test.\n"); return() }
+        error = function(e) NULL
+      )
+      if (is.null(bp)) {
+        cat("Could not compute BP test.\n")
+        return()
+      }
       print(bp)
     })
 
@@ -4778,13 +7154,15 @@ server <- function(input, output, session) {
       par(mfrow = c(1, 2), mar = c(4, 4, 3, 2))
       # Original
       plot(fitted(mod_orig), resid(mod_orig),
-           xlab = "Fitted", ylab = "Residuals",
-           main = "Original Model", col = "steelblue", pch = 19)
+        xlab = "Fitted", ylab = "Residuals",
+        main = "Original Model", col = "steelblue", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
       # Transformed
       plot(fitted(mod_t), resid(mod_t),
-           xlab = "Fitted", ylab = "Residuals",
-           main = "Transformed Model", col = "darkorange", pch = 19)
+        xlab = "Fitted", ylab = "Residuals",
+        main = "Transformed Model", col = "darkorange", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
     })
   })
@@ -4804,8 +7182,11 @@ server <- function(input, output, session) {
   output$wlsWSelect <- renderUI({
     req(data$numeric_vars)
     selectInput("wlsW", "Weight Variable:",
-                choices = c("Auto-estimate (1/|residual|)" = "__auto__",
-                            data$numeric_vars))
+      choices = c(
+        "Auto-estimate (1/|residual|)" = "__auto__",
+        data$numeric_vars
+      )
+    )
   })
 
   wls_ols_model <- reactiveVal(NULL)
@@ -4821,13 +7202,14 @@ server <- function(input, output, session) {
     # OLS fit
     mod_ols <- lm(y ~ x, data = df_wls)
     wls_ols_model(mod_ols)
-    bp_ols  <- lmtest::bptest(mod_ols)
+    bp_ols <- lmtest::bptest(mod_ols)
 
     output$wlsOLSScatter <- renderPlot({
       plot(x_wls, y_wls,
-           pch = 21, cex = 1, col = "steelblue",
-           xlab = input$wlsX, ylab = input$wlsY,
-           main = paste("OLS:", input$wlsY, "vs", input$wlsX))
+        pch = 21, cex = 1, col = "steelblue",
+        xlab = input$wlsX, ylab = input$wlsY,
+        main = paste("OLS:", input$wlsY, "vs", input$wlsX)
+      )
       abline(mod_ols, col = "red", lwd = 2)
     })
 
@@ -4847,9 +7229,10 @@ server <- function(input, output, session) {
 
     output$wlsOLSResid <- renderPlot({
       plot(fitted(mod_ols), resid(mod_ols),
-           xlab = expression(hat(y)[i]), ylab = expression(e[i]),
-           main = "OLS: Residuals vs Fitted",
-           col = "steelblue", pch = 19)
+        xlab = expression(hat(y)[i]), ylab = expression(e[i]),
+        main = "OLS: Residuals vs Fitted",
+        col = "steelblue", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
       lines(lowess(fitted(mod_ols), resid(mod_ols)), col = "blue", lwd = 2, lty = 2)
     })
@@ -4861,7 +7244,8 @@ server <- function(input, output, session) {
       if (any(w_raw <= 0, na.rm = TRUE)) {
         showNotification(
           "Weight column contains non-positive values. Using auto-estimation instead.",
-          type = "warning")
+          type = "warning"
+        )
         w_vals <- 1 / (abs(resid(mod_ols)) + 1e-8)
       } else {
         w_vals <- 1 / w_raw
@@ -4871,21 +7255,24 @@ server <- function(input, output, session) {
       w_vals <- 1 / (abs(resid(mod_ols)) + 1e-8)
     }
 
-    w_vals <- w_vals / mean(w_vals)   # normalise
+    w_vals <- w_vals / mean(w_vals) # normalise
     df_wls$w <- w_vals
 
     # WLS fit
     mod_wls <- lm(y ~ x, data = df_wls, weights = w)
     wls_wls_model(mod_wls)
-    bp_wls  <- lmtest::bptest(mod_wls)
+    bp_wls <- lmtest::bptest(mod_wls)
 
     output$wlsWLSScatter <- renderPlot({
       plot(x_wls, y_wls,
-           pch = 21, cex = sqrt(w_vals / max(w_vals)) * 2.5 + 0.3,
-           col = "darkorange",
-           xlab = input$wlsX, ylab = input$wlsY,
-           main = paste("WLS:", input$wlsY, "vs", input$wlsX,
-                        "(point size ~ weight)"))
+        pch = 21, cex = sqrt(w_vals / max(w_vals)) * 2.5 + 0.3,
+        col = "darkorange",
+        xlab = input$wlsX, ylab = input$wlsY,
+        main = paste(
+          "WLS:", input$wlsY, "vs", input$wlsX,
+          "(point size ~ weight)"
+        )
+      )
       abline(mod_wls, col = "red", lwd = 2)
     })
 
@@ -4906,27 +7293,31 @@ server <- function(input, output, session) {
     output$wlsWLSResid <- renderPlot({
       w_sqrt <- sqrt(w_vals)
       plot(w_sqrt * fitted(mod_wls),
-           w_sqrt * resid(mod_wls),
-           xlab = expression(sqrt(w[i]) * hat(y)[i]),
-           ylab = expression(sqrt(w[i]) * e[i]),
-           main = "WLS: Weighted Residuals vs Weighted Fitted",
-           col = "darkorange", pch = 19)
+        w_sqrt * resid(mod_wls),
+        xlab = expression(sqrt(w[i]) * hat(y)[i]),
+        ylab = expression(sqrt(w[i]) * e[i]),
+        main = "WLS: Weighted Residuals vs Weighted Fitted",
+        col = "darkorange", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
       lines(lowess(w_sqrt * fitted(mod_wls), w_sqrt * resid(mod_wls)),
-            col = "blue", lwd = 2, lty = 2)
+        col = "blue", lwd = 2, lty = 2
+      )
     })
 
     output$wlsComparison <- renderPlot({
       par(mfrow = c(1, 2), mar = c(4, 4, 3, 2))
       plot(fitted(mod_ols), resid(mod_ols),
-           xlab = expression(hat(y)[i]), ylab = expression(e[i]),
-           main = "OLS Residuals", col = "steelblue", pch = 19)
+        xlab = expression(hat(y)[i]), ylab = expression(e[i]),
+        main = "OLS Residuals", col = "steelblue", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
       w_sqrt <- sqrt(w_vals)
       plot(w_sqrt * fitted(mod_wls), w_sqrt * resid(mod_wls),
-           xlab = expression(sqrt(w[i]) * hat(y)[i]),
-           ylab = expression(sqrt(w[i]) * e[i]),
-           main = "WLS Weighted Residuals", col = "darkorange", pch = 19)
+        xlab = expression(sqrt(w[i]) * hat(y)[i]),
+        ylab = expression(sqrt(w[i]) * e[i]),
+        main = "WLS Weighted Residuals", col = "darkorange", pch = 19
+      )
       abline(h = 0, col = "red", lwd = 2)
     })
 
@@ -4941,12 +7332,11 @@ server <- function(input, output, session) {
         Diff = round(wls_coef - ols_coef, 4)
       )
       print(comp)
-      cat("\nOLS R-squared:",  round(summary(mod_ols)$r.squared, 4), "\n")
-      cat("WLS R-squared:",  round(summary(mod_wls)$r.squared, 4), "\n")
+      cat("\nOLS R-squared:", round(summary(mod_ols)$r.squared, 4), "\n")
+      cat("WLS R-squared:", round(summary(mod_wls)$r.squared, 4), "\n")
     })
   })
 }
 
 # Run the application
 shinyApp(ui = ui, server = server)
-
