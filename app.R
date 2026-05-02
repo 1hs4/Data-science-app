@@ -30,6 +30,118 @@ spn <- function(x) {
 HAS_PLOTLY <- requireNamespace("plotly", quietly = TRUE)
 has_glmnet <- function() requireNamespace("glmnet", quietly = TRUE)
 
+detox_asset_dir <- file.path(
+  ".",
+  "detox-data-science-analytics-html-template-2023-11-27-05-25-38-utc",
+  "Detox Pack",
+  "Detox",
+  "assets"
+)
+
+if (dir.exists(detox_asset_dir) && !("detox-assets" %in% names(shiny::resourcePaths()))) {
+  addResourcePath("detox-assets", normalizePath(detox_asset_dir, winslash = "/", mustWork = TRUE))
+}
+
+app_sections <- list(
+  list(tab = "upload", label = "Upload Data", icon = "upload"),
+  list(tab = "preview", label = "Data Preview", icon = "table"),
+  list(tab = "varanalysis", label = "Variable Analysis", icon = "sliders-h"),
+  list(tab = "correlation", label = "Correlation Matrix", icon = "th"),
+  list(tab = "catsuite", label = "Categorical Suite", icon = "layer-group"),
+  list(tab = "tests", label = "Hypothesis Tests", icon = "calculator"),
+  list(tab = "slr", label = "Simple Linear Regression", icon = "chart-line"),
+  list(tab = "mlr", label = "Multiple Linear Regression", icon = "project-diagram"),
+  list(tab = "ch9multi", label = "Multicollinearity", icon = "bezier-curve"),
+  list(tab = "modelbuilding", label = "Model Building", icon = "sitemap"),
+  list(tab = "indicator", label = "Indicator Variable", icon = "tags"),
+  list(tab = "modeladequacy", label = "Model Adequacy", icon = "stethoscope"),
+  list(tab = "boxtrans", label = "Box-Cox & Box-Tidwell", icon = "magic"),
+  list(tab = "wls", label = "Weighted Least Squares", icon = "balance-scale"),
+  list(tab = "report", label = "Summary Report", icon = "file-alt")
+)
+
+grouped_sections <- list(
+  data_analysis = c("upload", "preview", "varanalysis", "correlation", "catsuite", "tests"),
+  linear_reg = c("slr", "mlr"),
+  correcting_models = c("boxtrans", "wls")
+)
+
+main_nav_sections <- list(
+  list(tab = "upload", tabs = grouped_sections$data_analysis, label = "Data & Analysis", icon = "table"),
+  list(tab = "slr", tabs = grouped_sections$linear_reg, label = "Linear Regression", icon = "chart-line"),
+  list(tab = "boxtrans", tabs = grouped_sections$correcting_models, label = "Correcting Models", icon = "magic"),
+  list(tab = "ch9multi", tabs = "ch9multi", label = "Multicollinearity", icon = "bezier-curve"),
+  list(tab = "modelbuilding", tabs = "modelbuilding", label = "Model Building", icon = "sitemap"),
+  list(tab = "indicator", tabs = "indicator", label = "Indicator Variable", icon = "tags"),
+  list(tab = "modeladequacy", tabs = "modeladequacy", label = "Model Adequacy", icon = "stethoscope"),
+  list(tab = "report", tabs = "report", label = "Summary Report", icon = "file-alt")
+)
+
+build_proxy_sidebar <- function(items) {
+  sidebarMenu(
+    id = "tabs",
+    .list = lapply(items, function(item) {
+      menuItem(item$label, tabName = item$tab, icon = icon(item$icon))
+    })
+  )
+}
+
+build_detox_nav <- function(items) {
+  tags$ul(
+    class = "detox-nav-list",
+    lapply(seq_along(items), function(i) {
+      item <- items[[i]]
+      tags$li(
+        tags$a(
+          href = paste0("#", item$tab),
+          class = paste("detox-nav-link js-detox-nav", if (i == 1) "is-active"),
+          `data-tab` = item$tab,
+          `data-tabs` = paste(item$tabs %||% item$tab, collapse = "|"),
+          `data-label` = item$label,
+          icon(item$icon),
+          tags$span(item$label)
+        )
+      )
+    })
+  )
+}
+
+build_subpage_nav <- function(title, items) {
+  tags$div(
+    class = "detox-subnav-wrap",
+    tags$div(class = "detox-subnav-title", title),
+    tags$div(
+      class = "detox-subnav-list",
+      lapply(seq_along(items), function(i) {
+        item <- items[[i]]
+        tags$a(
+          href = paste0("#", item$tab),
+          class = paste("detox-subnav-link js-detox-subnav", if (i == 1) "is-active"),
+          `data-tab` = item$tab,
+          `data-label` = item$label,
+          icon(item$icon),
+          tags$span(item$label)
+        )
+      })
+    )
+  )
+}
+
+sample_button_row <- function(label, buttons, hint = NULL) {
+  box(
+    class = "reg-card",
+    title = tagList(icon("database"), paste("Sample Data -", label)),
+    solidHeader = TRUE,
+    status = "info",
+    width = 12,
+    tags$div(
+      style = "display:flex; gap:10px; flex-wrap:wrap; align-items:center;",
+      buttons
+    ),
+    if (!is.null(hint)) tags$div(class = "hint-text", style = "margin-top:10px;", hint)
+  )
+}
+
 plotly_output_safe <- function(outputId, height = "400px") {
   if (HAS_PLOTLY) {
     plotly::plotlyOutput(outputId, height = height)
@@ -55,24 +167,7 @@ ui <- dashboardPage(
   # Sidebar
   dashboardSidebar(
     width = 250,
-    sidebarMenu(
-      id = "tabs",
-      menuItem("Upload Data", tabName = "upload", icon = icon("upload")),
-      menuItem("Data Preview", tabName = "preview", icon = icon("table")),
-      menuItem("Variable Analysis", tabName = "varanalysis", icon = icon("sliders-h")),
-      menuItem("Correlation Matrix", tabName = "correlation", icon = icon("th")),
-      menuItem("Categorical Suite", tabName = "catsuite", icon = icon("layer-group")),
-      menuItem("Hypothesis Tests", tabName = "tests", icon = icon("calculator")),
-      menuItem("Simple Linear Regression", tabName = "slr", icon = icon("chart-line")),
-      menuItem("Multiple Linear Regression", tabName = "mlr", icon = icon("project-diagram")),
-      menuItem("Multicollinearity", tabName = "ch9multi", icon = icon("bezier-curve")),
-      menuItem("Model Building", tabName = "modelbuilding", icon = icon("sitemap")),
-      menuItem("Indicator Variable", tabName = "indicator", icon = icon("tags")),
-      menuItem("Model Adequacy", tabName = "modeladequacy", icon = icon("stethoscope")),
-      menuItem("Box-Cox & Box-Tidwell", tabName = "boxtrans", icon = icon("magic")),
-      menuItem("Weighted Least Squares", tabName = "wls", icon = icon("balance-scale")),
-      menuItem("Summary Report", tabName = "report", icon = icon("file-alt"))
-    )
+    div(class = "detox-tab-proxy", build_proxy_sidebar(app_sections))
   ),
 
   # Body
@@ -82,12 +177,84 @@ ui <- dashboardPage(
         rel = "stylesheet",
         href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       ),
+      tags$link(
+        rel = "stylesheet",
+        href = "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap"
+      ),
       tags$script(HTML("
         Shiny.addCustomMessageHandler('setDarkMode', function(message) {
           if (message && message.enabled) {
             document.body.classList.add('dark-mode-pro');
           } else {
             document.body.classList.remove('dark-mode-pro');
+          }
+        });
+
+        function detoxSyncNav(tabName) {
+          var links = document.querySelectorAll('.js-detox-nav');
+          links.forEach(function(link) {
+            var tabs = (link.getAttribute('data-tabs') || link.getAttribute('data-tab') || '').split('|');
+            var isActive = tabs.indexOf(tabName) !== -1;
+            link.classList.toggle('is-active', isActive);
+          });
+
+          var subLinks = document.querySelectorAll('.js-detox-subnav');
+          subLinks.forEach(function(link) {
+            var isActive = link.getAttribute('data-tab') === tabName;
+            link.classList.toggle('is-active', isActive);
+          });
+
+          var currentTab = document.getElementById('detox-current-tab');
+          if (currentTab) {
+            var activeSub = document.querySelector('.js-detox-subnav[data-tab=\"' + tabName + '\"]');
+            var activeMain = document.querySelector('.js-detox-nav.is-active');
+            var labelSource = activeSub || activeMain;
+            currentTab.textContent = labelSource ? (labelSource.getAttribute('data-label') || tabName) : tabName;
+          }
+        }
+
+        document.addEventListener('click', function(event) {
+          var navLink = event.target.closest('.js-detox-nav, .js-detox-subnav');
+          if (!navLink) return;
+
+          event.preventDefault();
+          var tabName = navLink.getAttribute('data-tab');
+          var proxyLink = document.querySelector('.detox-tab-proxy a[data-value=\"' + tabName + '\"]');
+
+          if (proxyLink && window.jQuery) {
+            window.jQuery(proxyLink).tab('show');
+            proxyLink.click();
+          } else if (window.Shiny) {
+            window.Shiny.setInputValue('tabs', tabName, {priority: 'event'});
+          }
+
+          document.body.classList.remove('detox-mobile-open');
+          detoxSyncNav(tabName);
+        });
+
+        document.addEventListener('shown.bs.tab', function(event) {
+          var target = event.target;
+          if (target && target.matches('.detox-tab-proxy a[data-value]')) {
+            detoxSyncNav(target.getAttribute('data-value'));
+          }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+          var activeProxy = document.querySelector('.detox-tab-proxy li.active a[data-value]');
+          detoxSyncNav(activeProxy ? activeProxy.getAttribute('data-value') : 'upload');
+
+          var toggle = document.querySelector('.js-detox-menu-toggle');
+          if (toggle) {
+            toggle.addEventListener('click', function() {
+              document.body.classList.toggle('detox-mobile-open');
+            });
+          }
+
+          var backdrop = document.querySelector('.js-detox-backdrop');
+          if (backdrop) {
+            backdrop.addEventListener('click', function() {
+              document.body.classList.remove('detox-mobile-open');
+            });
           }
         });
       ")),
@@ -425,8 +592,508 @@ ui <- dashboardPage(
         body.dark-mode-pro .mb-metric strong {
           color:#e5e7eb;
         }
+
+        .wrapper,
+        .content-wrapper,
+        .right-side {
+          min-height: 100vh;
+        }
+        .main-header,
+        .main-sidebar,
+        .left-side {
+          display: none !important;
+        }
+        .content-wrapper,
+        .right-side,
+        .main-footer {
+          margin-left: 0 !important;
+        }
+        .wrapper {
+          background: linear-gradient(180deg, #dfe9f8 0%, #eef4fb 18%, #eef3f9 18.1%, #eef3f9 100%);
+        }
+        .content {
+          padding: 0 0 24px 0;
+        }
+        .detox-tab-proxy {
+          display: none;
+        }
+        .detox-app-shell {
+          min-height: 100vh;
+          position: relative;
+        }
+        .detox-mobile-backdrop {
+          display: none;
+          position: fixed;
+          inset: 0;
+          background: rgba(3, 11, 24, 0.55);
+          z-index: 998;
+        }
+        .detox-header {
+          position: relative;
+          z-index: 999;
+          padding: 24px 28px 18px;
+          color: #0f172a;
+        }
+        .detox-header-inner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
+          flex-wrap: wrap;
+        }
+        .detox-brand-wrap {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .detox-brand-title {
+          font-family: 'Poppins', 'Plus Jakarta Sans', sans-serif;
+          font-size: 28px;
+          font-weight: 700;
+          line-height: 1.1;
+          margin: 0;
+          color: #0f172a;
+          text-shadow: none;
+        }
+        .detox-brand-copy p {
+          margin: 6px 0 0;
+          color: #475569;
+          font-size: 14px;
+          max-width: 680px;
+          text-shadow: none;
+        }
+        .detox-header-badges {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .detox-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 14px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.92);
+          border: 1px solid #dbe4f0;
+          color: #334155;
+          font-weight: 600;
+          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+        }
+        .detox-chip strong {
+          color: #ffb07c;
+          font-weight: 700;
+        }
+        .detox-chip.current-module {
+          background: rgba(255, 255, 255, 0.96);
+          border-color: #d7e0ec;
+        }
+        .upload-note {
+          color: #1f2937;
+        }
+        .upload-note strong {
+          color: inherit;
+        }
+        .detox-menu-toggle {
+          display: none;
+          width: 48px;
+          height: 48px;
+          border: 0;
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.12);
+          color: #fff;
+          font-size: 20px;
+        }
+        .detox-layout {
+          display: grid;
+          grid-template-columns: 320px minmax(0, 1fr);
+          gap: 24px;
+          padding: 0 28px 28px;
+          align-items: start;
+        }
+        .detox-sidebar-panel {
+          position: sticky;
+          top: 24px;
+          background: linear-gradient(180deg, #0d1b2f 0%, #102540 100%);
+          border-radius: 26px;
+          padding: 22px 18px;
+          box-shadow: 0 20px 45px rgba(4, 13, 27, 0.2);
+          color: #fff;
+        }
+        .detox-sidebar-panel h4 {
+          color: #fff;
+          font-family: 'Poppins', 'Plus Jakarta Sans', sans-serif;
+          font-size: 18px;
+          font-weight: 700;
+          margin: 0 0 8px;
+        }
+        .detox-sidebar-panel p {
+          color: rgba(255, 255, 255, 0.7);
+          font-size: 13px;
+          margin: 0 0 18px;
+        }
+        .detox-nav-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .detox-nav-link {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          padding: 13px 16px;
+          border-radius: 16px;
+          color: rgba(255, 255, 255, 0.78);
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          transition: all .2s ease;
+          font-weight: 600;
+        }
+        .detox-nav-link:hover,
+        .detox-nav-link:focus {
+          color: #fff;
+          text-decoration: none;
+          transform: translateX(3px);
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .detox-nav-link.is-active {
+          background: linear-gradient(135deg, #ff7f50 0%, #ff5e57 100%);
+          color: #fff;
+          border-color: transparent;
+          box-shadow: 0 16px 24px rgba(255, 94, 87, 0.28);
+        }
+        .detox-main {
+          min-width: 0;
+        }
+        .detox-content-card {
+          background: rgba(255, 255, 255, 0.68);
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          border-radius: 28px;
+          padding: 22px;
+          box-shadow: 0 20px 40px rgba(30, 41, 59, 0.08);
+        }
+        .detox-content-intro {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 18px;
+          flex-wrap: wrap;
+        }
+        .detox-content-intro h2 {
+          margin: 0;
+          color: #0f172a;
+          font-family: 'Poppins', 'Plus Jakarta Sans', sans-serif;
+          font-size: 30px;
+          font-weight: 700;
+        }
+        .detox-content-intro p {
+          margin: 8px 0 0;
+          color: #64748b;
+          max-width: 680px;
+        }
+        .detox-note {
+          padding: 10px 14px;
+          border-radius: 16px;
+          background: #fff7ed;
+          color: #9a3412;
+          font-weight: 700;
+          border: 1px solid #fed7aa;
+        }
+        .detox-subnav-wrap {
+          margin-bottom: 18px;
+          padding: 16px 18px;
+          border-radius: 22px;
+          background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+          border: 1px solid #dbe8f6;
+        }
+        .detox-subnav-title {
+          font-size: 13px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: .08em;
+          color: #47607c;
+          margin-bottom: 12px;
+        }
+        .detox-subnav-list {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .detox-subnav-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          padding: 11px 16px;
+          border-radius: 999px;
+          background: #ffffff;
+          border: 1px solid #d6e2f0;
+          color: #334155;
+          font-weight: 700;
+          box-shadow: 0 8px 20px rgba(148, 163, 184, 0.12);
+          transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+        }
+        .detox-subnav-link:hover,
+        .detox-subnav-link:focus {
+          text-decoration: none;
+          color: #0f172a;
+          transform: translateY(-1px);
+          box-shadow: 0 10px 22px rgba(148, 163, 184, 0.18);
+        }
+        .detox-subnav-link.is-active {
+          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+          border-color: transparent;
+          color: #ffffff;
+          box-shadow: 0 12px 24px rgba(37, 99, 235, 0.28);
+        }
+        .tab-content > .tab-pane {
+          margin-top: 0;
+        }
+        .tab-content > .tab-pane:not(.active) {
+          display: none;
+        }
+        .quick-actions .box-body {
+          padding-bottom: 6px;
+        }
+        .dataTables_wrapper .dataTables_filter input,
+        .dataTables_wrapper .dataTables_length select {
+          color: #111827 !important;
+          background: #ffffff !important;
+        }
+        .dataTables_wrapper table.dataTable thead th,
+        .dataTables_wrapper table.dataTable tbody td,
+        .dataTables_wrapper .dataTables_info,
+        .dataTables_wrapper .dataTables_paginate .paginate_button,
+        .dataTables_wrapper .dataTables_filter,
+        .dataTables_wrapper .dataTables_length,
+        .dataTables_wrapper .dataTables_filter label,
+        .dataTables_wrapper .dataTables_length label {
+          color: #1f2937 !important;
+        }
+        body.dark-mode-pro .wrapper {
+          background: linear-gradient(180deg, #030712 0%, #07111f 18%, #020617 18.1%, #020617 100%);
+        }
+        body.dark-mode-pro .detox-content-card {
+          background: rgba(15, 23, 42, 0.82);
+          border-color: rgba(51, 65, 85, 0.9);
+        }
+        body.dark-mode-pro .detox-subnav-wrap {
+          background: linear-gradient(180deg, #0f1b31 0%, #0b1629 100%);
+          border-color: #23344b;
+        }
+        body.dark-mode-pro .detox-subnav-title {
+          color: #93c5fd;
+        }
+        body.dark-mode-pro .detox-subnav-link {
+          background: #111c30;
+          border-color: #2c415f;
+          color: #dbeafe;
+          box-shadow: none;
+        }
+        body.dark-mode-pro .detox-subnav-link:hover,
+        body.dark-mode-pro .detox-subnav-link:focus {
+          color: #ffffff;
+          background: #16233b;
+        }
+        body.dark-mode-pro .detox-subnav-link.is-active {
+          background: linear-gradient(135deg, #fb7185 0%, #f97316 100%);
+          color: #ffffff;
+          border-color: transparent;
+          box-shadow: 0 12px 24px rgba(249, 115, 22, 0.22);
+        }
+        body.dark-mode-pro .detox-content-intro h2,
+        body.dark-mode-pro .detox-chip,
+        body.dark-mode-pro .detox-sidebar-panel h4 {
+          color: #f8fafc;
+        }
+        body.dark-mode-pro .detox-content-intro p,
+        body.dark-mode-pro .detox-sidebar-panel p {
+          color: #cbd5e1;
+        }
+        body.dark-mode-pro .detox-brand-title,
+        body.dark-mode-pro .detox-brand-copy p,
+        body.dark-mode-pro .detox-chip,
+        body.dark-mode-pro .detox-chip strong {
+          color: #f8fafc !important;
+        }
+        body.dark-mode-pro .detox-chip {
+          background: rgba(15, 23, 42, 0.9) !important;
+          border-color: #334155 !important;
+          box-shadow: 0 8px 20px rgba(2, 6, 23, 0.28);
+        }
+        body.dark-mode-pro .detox-chip.current-module {
+          background: rgba(15, 23, 42, 0.96) !important;
+          border-color: #475569 !important;
+        }
+        body.dark-mode-pro .detox-chip.current-module strong {
+          color: #fdba74 !important;
+        }
+        body.dark-mode-pro .upload-note {
+          color: #e5e7eb !important;
+          border: 1px solid #334155;
+        }
+        body.dark-mode-pro .upload-note.upload-note-success {
+          background: #1f3a28 !important;
+        }
+        body.dark-mode-pro .upload-note.upload-note-info {
+          background: #173247 !important;
+        }
+        body.dark-mode-pro .upload-note strong,
+        body.dark-mode-pro .upload-note .fa,
+        body.dark-mode-pro .upload-note .fas {
+          color: #f8fafc !important;
+        }
+        body.dark-mode-pro .detox-nav-link {
+          color: rgba(248, 250, 252, 0.82);
+          background: rgba(255, 255, 255, 0.05);
+        }
+        body.dark-mode-pro .detox-nav-link.is-active {
+          background: linear-gradient(135deg, #fb7185 0%, #f97316 100%);
+        }
+        body.dark-mode-pro .dataTables_wrapper table.dataTable,
+        body.dark-mode-pro .dataTables_wrapper table.dataTable thead th,
+        body.dark-mode-pro .dataTables_wrapper table.dataTable tbody td,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_info,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_paginate .paginate_button,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_filter,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_length,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_filter label,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_length label {
+          color: #e5e7eb !important;
+        }
+        body.dark-mode-pro .dataTables_wrapper table.dataTable thead th,
+        body.dark-mode-pro .dataTables_wrapper table.dataTable tbody td {
+          border-color: #243244 !important;
+          background-color: transparent !important;
+        }
+        body.dark-mode-pro .dataTables_wrapper .dataTables_filter input,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_length select,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_paginate .paginate_button,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+        body.dark-mode-pro .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+          color: #e5e7eb !important;
+          background: #111827 !important;
+          border-color: #334155 !important;
+        }
+        body.dark-mode-pro .selectize-dropdown,
+        body.dark-mode-pro .selectize-dropdown .option,
+        body.dark-mode-pro .selectize-dropdown .optgroup-header {
+          background: #111827 !important;
+          color: #e5e7eb !important;
+          border-color: #334155 !important;
+        }
+        body.dark-mode-pro .checkbox,
+        body.dark-mode-pro .radio,
+        body.dark-mode-pro .help-block {
+          color: #e5e7eb !important;
+        }
+        @media (max-width: 1200px) {
+          .detox-layout {
+            grid-template-columns: 280px minmax(0, 1fr);
+          }
+        }
+        @media (max-width: 992px) {
+          .detox-menu-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .detox-layout {
+            grid-template-columns: 1fr;
+            padding: 0 16px 20px;
+          }
+          .detox-sidebar-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: min(86vw, 320px);
+            height: 100vh;
+            z-index: 999;
+            border-radius: 0 28px 28px 0;
+            transform: translateX(-104%);
+            transition: transform .22s ease;
+            overflow-y: auto;
+          }
+          .detox-header {
+            padding: 18px 16px 16px;
+          }
+          .detox-content-card {
+            padding: 16px;
+            border-radius: 20px;
+          }
+          body.detox-mobile-open .detox-sidebar-panel {
+            transform: translateX(0);
+          }
+          body.detox-mobile-open .detox-mobile-backdrop {
+            display: block;
+          }
+        }
       "))
     ),
+    div(
+      class = "boxed_wrapper ltr detox-app-shell",
+      div(class = "detox-mobile-backdrop js-detox-backdrop"),
+      tags$header(
+        class = "detox-header",
+        div(
+          class = "detox-header-inner",
+          div(
+            class = "detox-brand-wrap",
+            tags$button(
+              class = "detox-menu-toggle js-detox-menu-toggle",
+              type = "button",
+              icon("bars")
+            ),
+            div(
+              class = "detox-brand-copy",
+              tags$h1(class = "detox-brand-title", "Universal Statistical Analysis"),
+              tags$p("Upload any dataset, explore it visually, and run your full CRD and regression workflow in one place.")
+            )
+          ),
+          div(
+            class = "detox-header-badges",
+            div(class = "detox-chip current-module", icon("compass"), "Current Module:", tags$strong(id = "detox-current-tab", "Upload Data"))
+          )
+        )
+      ),
+      div(
+        class = "detox-layout",
+          tags$aside(
+          class = "detox-sidebar-panel",
+          tags$h4("Analysis Modules"),
+          tags$p("Switch between data preparation, inference, diagnostics, and reporting without leaving the same interface."),
+          build_detox_nav(main_nav_sections)
+        ),
+        tags$main(
+          class = "detox-main",
+          div(
+            class = "detox-content-card",
+            conditionalPanel(
+              condition = "['upload','preview','varanalysis','correlation','catsuite','tests'].includes(input.tabs)",
+              build_subpage_nav(
+                "Data & Analysis",
+                Filter(function(x) x$tab %in% grouped_sections$data_analysis, app_sections)
+              )
+            ),
+            conditionalPanel(
+              condition = "['slr','mlr'].includes(input.tabs)",
+              build_subpage_nav(
+                "Linear Regression",
+                Filter(function(x) x$tab %in% grouped_sections$linear_reg, app_sections)
+              )
+            ),
+            conditionalPanel(
+              condition = "['boxtrans','wls'].includes(input.tabs)",
+              build_subpage_nav(
+                "Correcting Inadequate Models",
+                Filter(function(x) x$tab %in% grouped_sections$correcting_models, app_sections)
+              )
+            ),
     conditionalPanel(
       condition = "input.tabs == 'upload' || input.tabs == 'preview'",
       fluidRow(
@@ -508,11 +1175,13 @@ ui <- dashboardPage(
               tags$li("Click 'Analyze Data' to confirm your upload")
             ),
             tags$div(
+              class = "upload-note upload-note-success",
               style = "background-color: #dff0d8; padding: 10px; border-radius: 5px; margin-top: 10px;",
               tags$strong(icon("check-circle"), " Default Dataset Loaded:"),
               " The app starts with P2_DeliveryTime.xlsx, so you can analyze immediately without uploading."
             ),
             tags$div(
+              class = "upload-note upload-note-info",
               style = "background-color: #d9edf7; padding: 10px; border-radius: 5px; margin-top: 10px;",
               tags$strong(icon("info-circle"), " File Size Limit:"),
               " Maximum upload size is 50 MB. For larger datasets, consider filtering or sampling your data before upload."
@@ -1182,6 +1851,13 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
+          sample_button_row(
+            "SLR",
+            actionButton("loadSampleSLR", tagList(icon("database"), "Load P1_RocketPropellant"), class = "btn btn-info"),
+            "Loads the chapter sample dataset for Simple Linear Regression."
+          )
+        ),
+        fluidRow(
           box(
             class = "reg-card",
             status = "primary", solidHeader = FALSE,
@@ -1379,6 +2055,13 @@ ui <- dashboardPage(
           tags$div(
             tags$h4("Model Setup"),
             tags$p("Choose the response (Y) and two or more predictor variables (X), then click Fit Model.")
+          )
+        ),
+        fluidRow(
+          sample_button_row(
+            "MLR",
+            actionButton("loadSampleMLR", tagList(icon("database"), "Load P2_DeliveryTime"), class = "btn btn-info"),
+            "Loads the chapter sample dataset for Multiple Linear Regression."
           )
         ),
         fluidRow(
@@ -1626,6 +2309,13 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
+          sample_button_row(
+            "Multicollinearity",
+            actionButton("loadSampleCh9", tagList(icon("database"), "Load Acetylene Data"), class = "btn btn-info"),
+            "Loads the Acetylene dataset used for the multicollinearity chapter."
+          )
+        ),
+        fluidRow(
           box(
             class = "reg-card",
             status = "primary", solidHeader = FALSE,
@@ -1826,6 +2516,13 @@ ui <- dashboardPage(
           tags$div(
             tags$h4("Model Building and Variable Selection"),
             tags$p("Compare the full model, all possible regressions, and stepwise procedures.")
+          )
+        ),
+        fluidRow(
+          sample_button_row(
+            "Model Building",
+            actionButton("loadSampleMB", tagList(icon("database"), "Load P3_HaldsCement"), class = "btn btn-info"),
+            "Loads the chapter sample dataset for Topic 10 model building."
           )
         ),
         fluidRow(
@@ -2063,6 +2760,13 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
+          sample_button_row(
+            "Indicator Variables",
+            actionButton("loadSampleIndicator", tagList(icon("database"), "Load P11_ToolLife"), class = "btn btn-info"),
+            "Loads the Tool Life dataset used for dummy-variable examples."
+          )
+        ),
+        fluidRow(
           box(
             class = "reg-card",
             status = "primary", solidHeader = FALSE,
@@ -2205,6 +2909,13 @@ ui <- dashboardPage(
           tags$div(
             tags$h4("Model Adequacy Checks"),
             tags$p("Select a fitted regression model (SLR or MLR) and click Run Diagnostics.")
+          )
+        ),
+        fluidRow(
+          sample_button_row(
+            "Model Adequacy",
+            actionButton("loadSampleMA", tagList(icon("database"), "Load P2_DeliveryTime"), class = "btn btn-info"),
+            "Loads the Delivery Time dataset commonly used with the MLR adequacy checks."
           )
         ),
         fluidRow(
@@ -2370,6 +3081,17 @@ ui <- dashboardPage(
           tags$div(
             tags$h4("Box-Cox & Box-Tidwell Transformations"),
             tags$p("Select Y and a single X variable, then choose the transformation to apply.")
+          )
+        ),
+        fluidRow(
+          sample_button_row(
+            "Correcting Model Inadequacy",
+            tagList(
+              actionButton("loadSampleBTUtility", tagList(icon("database"), "Electric Utility"), class = "btn btn-info"),
+              actionButton("loadSampleBTWind", tagList(icon("database"), "Wind Mill"), class = "btn btn-info"),
+              actionButton("loadSampleBTIncome", tagList(icon("database"), "Income"), class = "btn btn-info")
+            ),
+            "Loads course datasets typically used with Box-Cox, Box-Tidwell, and related corrective methods."
           )
         ),
         fluidRow(
@@ -2539,6 +3261,13 @@ ui <- dashboardPage(
           )
         ),
         fluidRow(
+          sample_button_row(
+            "Weighted Least Squares",
+            actionButton("loadSampleWLS", tagList(icon("database"), "Load Income"), class = "btn btn-info"),
+            "Loads the Income dataset commonly used to demonstrate WLS."
+          )
+        ),
+        fluidRow(
           box(
             class = "reg-card", status = "primary", solidHeader = FALSE,
             width = 12, style = "padding:18px;",
@@ -2665,6 +3394,10 @@ ui <- dashboardPage(
       )
     )
   )
+)
+    )
+  )
+)
 )
 
 # Server Logic
@@ -2826,6 +3559,46 @@ server <- function(input, output, session) {
     categorical_vars = names(default_data)[!sapply(default_data, is.numeric)]
   )
 
+  course_dataset_path <- function(filename) {
+    candidates <- c(
+      file.path("data", filename),
+      file.path("Codes&Data", filename),
+      file.path("..", "Codes&Data", filename)
+    )
+    found <- candidates[file.exists(candidates)]
+    if (length(found) == 0) NULL else found[1]
+  }
+
+  read_course_dataset <- function(filename) {
+    dataset_path <- course_dataset_path(filename)
+    if (is.null(dataset_path)) {
+      stop(sprintf("Could not find %s in the expected course folders.", filename), call. = FALSE)
+    }
+    ext <- tolower(tools::file_ext(dataset_path))
+    if (ext %in% c("xlsx", "xls")) {
+      as.data.frame(readxl::read_excel(dataset_path), check.names = FALSE)
+    } else if (ext == "csv") {
+      read.csv(dataset_path, stringsAsFactors = FALSE, check.names = FALSE)
+    } else {
+      stop(sprintf("Unsupported dataset format for %s.", filename), call. = FALSE)
+    }
+  }
+
+  load_course_dataset <- function(filename, selected_tab, success_message, post_load = NULL) {
+    dataset <- read_course_dataset(filename)
+    data$raw_base <- dataset
+    data$raw <- apply_cleaning_pipeline(dataset,
+      missing_mode = input$cleanMissing %||% "keep",
+      outlier_mode = input$cleanOutliers %||% "remove",
+      log_vars = input$cleanLogVars %||% NULL
+    )
+    refresh_var_types(data$raw)
+    data$analyzed <- TRUE
+    if (!is.null(post_load)) post_load()
+    updateTabItems(session, "tabs", selected = selected_tab)
+    showNotification(success_message, type = "message")
+  }
+
   # File upload handler
   observeEvent(input$datafile, {
     req(input$datafile)
@@ -2852,6 +3625,7 @@ server <- function(input, output, session) {
         refresh_var_types(data$raw)
 
         data$analyzed <- TRUE
+        updateTabItems(session, "tabs", selected = "upload")
 
         showNotification(paste("Data uploaded successfully! Variable types detected. Outliers removed:", removed_n),
           type = "message", duration = 3
@@ -3009,6 +3783,7 @@ server <- function(input, output, session) {
   observeEvent(input$analyzeBtn, {
     req(data$raw)
     data$analyzed <- TRUE
+    updateTabItems(session, "tabs", selected = "upload")
     showNotification("Data ready for analysis!", type = "message", duration = 3)
   })
 
@@ -5786,31 +6561,19 @@ server <- function(input, output, session) {
     list(selected = selected, trace = trace, steps = step_tbl)
   }
 
-  mb_hald_path <- function() {
-    candidates <- c(
-      "data/P3_HaldsCement.xlsx",
-      "../Codes&Data/Codes&Data/P3_HaldsCement.xlsx",
-      "d:/KFUPM/T-252/Stat 413/Codes&Data/Codes&Data/P3_HaldsCement.xlsx"
-    )
-    found <- candidates[file.exists(candidates)]
-    if (length(found) == 0) NULL else found[1]
-  }
-
   observeEvent(input$mbLoadHald, {
-    hald_path <- mb_hald_path()
-    if (is.null(hald_path)) {
-      showNotification("Could not find P3_HaldsCement.xlsx in the expected course folders.", type = "error")
-      return()
-    }
-    hald <- as.data.frame(readxl::read_excel(hald_path), check.names = FALSE)
-    data$raw_base <- hald
-    data$raw <- hald
-    refresh_var_types(data$raw)
-    data$analyzed <- TRUE
-    mb_results(NULL)
-    mb_final_model(NULL)
-    updateTabItems(session, "tabs", selected = "modelbuilding")
-    showNotification("Hald cement data loaded for Topic 10.", type = "message")
+    tryCatch(
+      load_course_dataset(
+        "P3_HaldsCement.xlsx",
+        selected_tab = "modelbuilding",
+        success_message = "Hald cement data loaded for Topic 10.",
+        post_load = function() {
+          mb_results(NULL)
+          mb_final_model(NULL)
+        }
+      ),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
   })
 
   output$mbYSelect <- renderUI({
@@ -6336,12 +7099,16 @@ server <- function(input, output, session) {
   output$globalVarSearchUI <- renderUI({
     all_vars <- c(data$numeric_vars, data$categorical_vars)
     selectizeInput("globalVarSearch", "Global Variable Search:",
-      choices = all_vars, multiple = FALSE,
-      options = list(placeholder = "Find variable")
+      choices = c(stats::setNames("", ""), all_vars), selected = "",
+      multiple = FALSE,
+      options = list(
+        placeholder = "Find variable",
+        allowEmptyOption = TRUE
+      )
     )
   })
 
-  observeEvent(input$globalVarSearch, {
+  observeEvent(input$globalVarSearch, ignoreInit = TRUE, {
     req(input$globalVarSearch)
     var_selected <- input$globalVarSearch
     if (var_selected %in% data$numeric_vars) {
@@ -6383,6 +7150,84 @@ server <- function(input, output, session) {
     refresh_var_types(data$raw)
     data$analyzed <- TRUE
     showNotification("Reset to base dataset (without current cleaning transforms).", type = "message")
+  })
+
+  observeEvent(input$loadSampleSLR, {
+    tryCatch(
+      load_course_dataset("P1_RocketPropellant.xlsx", "slr", "P1 Rocket Propellant sample data loaded for SLR."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleMLR, {
+    tryCatch(
+      load_course_dataset("P2_DeliveryTime.xlsx", "mlr", "P2 Delivery Time sample data loaded for MLR."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleMA, {
+    tryCatch(
+      load_course_dataset("P2_DeliveryTime.xlsx", "modeladequacy", "P2 Delivery Time sample data loaded for model adequacy checks."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleIndicator, {
+    tryCatch(
+      load_course_dataset("P11_ToolLife.xlsx", "indicator", "P11 Tool Life sample data loaded for indicator-variable analysis."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleCh9, {
+    tryCatch(
+      load_course_dataset("Aacetylene.xlsx", "ch9multi", "Acetylene sample data loaded for multicollinearity analysis."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleMB, {
+    tryCatch(
+      load_course_dataset(
+        "P3_HaldsCement.xlsx",
+        "modelbuilding",
+        "P3 Hald's Cement sample data loaded for model building.",
+        post_load = function() {
+          mb_results(NULL)
+          mb_final_model(NULL)
+        }
+      ),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleBTUtility, {
+    tryCatch(
+      load_course_dataset("P8_ElectricUtility.xlsx", "boxtrans", "Electric Utility sample data loaded."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleBTWind, {
+    tryCatch(
+      load_course_dataset("P9_WindMill.xlsx", "boxtrans", "Wind Mill sample data loaded."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleBTIncome, {
+    tryCatch(
+      load_course_dataset("Income.xlsx", "boxtrans", "Income sample data loaded for corrective-model checks."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleWLS, {
+    tryCatch(
+      load_course_dataset("Income.xlsx", "wls", "Income sample data loaded for WLS."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
   })
 
   observeEvent(input$presetPriceMileage, {
