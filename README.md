@@ -65,7 +65,3 @@ Rscript -e "shiny::runApp()"
 
 - Keep the `data/` folder in the repository so the default dataset is available in deployed environments.
 - If you do not want to include a default file, the app still runs using fallback data.
-
-## License
-
-Add your preferred license here (for example, MIT).
