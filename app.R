@@ -1,5 +1,5 @@
 ##########################################################
-### Universal Statistical Analysis Shiny App
+### ModelCraft: Statistical Learning in R
 ### Works with Any Dataset - CRD Analysis
 ##########################################################
 
@@ -51,8 +51,11 @@ app_sections <- list(
   list(tab = "tests", label = "Hypothesis Tests", icon = "calculator"),
   list(tab = "slr", label = "Simple Linear Regression", icon = "chart-line"),
   list(tab = "mlr", label = "Multiple Linear Regression", icon = "project-diagram"),
+  list(tab = "polyreg", label = "Polynomial Regression", icon = "chart-area"),
+  list(tab = "influence", label = "Leverage & Influence", icon = "crosshairs"),
   list(tab = "ch9multi", label = "Multicollinearity", icon = "bezier-curve"),
   list(tab = "modelbuilding", label = "Model Building", icon = "sitemap"),
+  list(tab = "glm", label = "Generalized Linear Models", icon = "wave-square"),
   list(tab = "indicator", label = "Indicator Variable", icon = "tags"),
   list(tab = "modeladequacy", label = "Model Adequacy", icon = "stethoscope"),
   list(tab = "boxtrans", label = "Box-Cox & Box-Tidwell", icon = "magic"),
@@ -62,16 +65,18 @@ app_sections <- list(
 
 grouped_sections <- list(
   data_analysis = c("upload", "preview", "varanalysis", "correlation", "catsuite", "tests"),
-  linear_reg = c("slr", "mlr"),
+  linear_reg = c("slr", "mlr", "polyreg"),
   correcting_models = c("boxtrans", "wls")
 )
 
 main_nav_sections <- list(
   list(tab = "upload", tabs = grouped_sections$data_analysis, label = "Data & Analysis", icon = "table"),
-  list(tab = "slr", tabs = grouped_sections$linear_reg, label = "Linear Regression", icon = "chart-line"),
+  list(tab = "slr", tabs = grouped_sections$linear_reg, label = "Regression", icon = "chart-line"),
+  list(tab = "influence", tabs = "influence", label = "Leverage & Influence", icon = "crosshairs"),
   list(tab = "boxtrans", tabs = grouped_sections$correcting_models, label = "Correcting Models", icon = "magic"),
   list(tab = "ch9multi", tabs = "ch9multi", label = "Multicollinearity", icon = "bezier-curve"),
   list(tab = "modelbuilding", tabs = "modelbuilding", label = "Model Building", icon = "sitemap"),
+  list(tab = "glm", tabs = "glm", label = "Generalized Linear Models", icon = "wave-square"),
   list(tab = "indicator", tabs = "indicator", label = "Indicator Variable", icon = "tags"),
   list(tab = "modeladequacy", tabs = "modeladequacy", label = "Model Adequacy", icon = "stethoscope"),
   list(tab = "report", tabs = "report", label = "Summary Report", icon = "file-alt")
@@ -160,7 +165,7 @@ ui <- dashboardPage(
 
   # Header
   dashboardHeader(
-    title = "Universal Statistical Analysis",
+    title = "ModelCraft: Statistical Learning in R",
     titleWidth = 350
   ),
 
@@ -240,6 +245,11 @@ ui <- dashboardPage(
         });
 
         document.addEventListener('DOMContentLoaded', function() {
+          var darkToggle = document.getElementById('darkModeToggle');
+          if (darkToggle && darkToggle.checked) {
+            document.body.classList.add('dark-mode-pro');
+          }
+
           var activeProxy = document.querySelector('.detox-tab-proxy li.active a[data-value]');
           detoxSyncNav(activeProxy ? activeProxy.getAttribute('data-value') : 'upload');
 
@@ -384,6 +394,20 @@ ui <- dashboardPage(
         body.dark-mode-pro .box-header {
           background: #111827 !important;
           border-color: #334155 !important;
+        }
+        body.dark-mode-pro .small-box h3,
+        body.dark-mode-pro .small-box p,
+        body.dark-mode-pro .small-box .icon,
+        body.dark-mode-pro .small-box .small-box-footer {
+          color: #e5e7eb !important;
+        }
+        body.dark-mode-pro .small-box .icon {
+          color: rgba(148, 163, 184, 0.22) !important;
+          opacity: 1 !important;
+          text-shadow: 0 0 18px rgba(15, 23, 42, 0.55);
+        }
+        body.dark-mode-pro .small-box .small-box-footer {
+          background: rgba(255, 255, 255, 0.04) !important;
         }
         body.dark-mode-pro .control-label,
         body.dark-mode-pro .section-label,
@@ -1051,7 +1075,7 @@ ui <- dashboardPage(
             ),
             div(
               class = "detox-brand-copy",
-              tags$h1(class = "detox-brand-title", "Universal Statistical Analysis"),
+              tags$h1(class = "detox-brand-title", "ModelCraft: Statistical Learning in R"),
               tags$p("Upload any dataset, explore it visually, and run your full CRD and regression workflow in one place.")
             )
           ),
@@ -1081,9 +1105,9 @@ ui <- dashboardPage(
               )
             ),
             conditionalPanel(
-              condition = "['slr','mlr'].includes(input.tabs)",
+              condition = "['slr','mlr','polyreg'].includes(input.tabs)",
               build_subpage_nav(
-                "Linear Regression",
+                "Regression",
                 Filter(function(x) x$tab %in% grouped_sections$linear_reg, app_sections)
               )
             ),
@@ -1120,7 +1144,7 @@ ui <- dashboardPage(
               tags$div(
                 style = "display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;",
                 checkboxInput("interactivePlots", "Interactive", value = HAS_PLOTLY),
-                checkboxInput("darkModeToggle", "Dark mode", FALSE),
+                checkboxInput("darkModeToggle", "Dark mode", TRUE),
                 downloadButton("downloadState", "Save Session", class = "btn btn-success"),
                 fileInput("loadState", NULL, accept = ".rds", buttonLabel = "Load Session", placeholder = "No file")
               )
@@ -2296,6 +2320,379 @@ ui <- dashboardPage(
       ),
 
       # ========================================================
+      # CHAPTER 7: POLYNOMIAL REGRESSION MODELS TAB
+      # ========================================================
+      tabItem(
+        tabName = "polyreg",
+        tags$div(
+          class = "reg-step-banner",
+          tags$div(class = "step-badge", icon("chart-area")),
+          tags$div(
+            tags$h4("Polynomial Regression and Splines"),
+            tags$p("Compare polynomial orders, inspect centering effects on multicollinearity, and fit spline models for piecewise behavior.")
+          )
+        ),
+        fluidRow(
+          sample_button_row(
+            "Polynomial Regression",
+            tagList(
+              actionButton("loadSamplePolyP5", tagList(icon("database"), "Load P5_HardWood"), class = "btn btn-info"),
+              actionButton("loadSamplePolyVoltage", tagList(icon("database"), "Load VoltageDrop"), class = "btn btn-info")
+            ),
+            "Use P5_HardWood for polynomial/centering examples and VoltageDrop for spline examples."
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            status = "primary", solidHeader = FALSE,
+            width = 12, style = "padding:18px;",
+            fluidRow(
+              column(
+                2,
+                tags$div(class = "section-label", "Response Variable (Y)"),
+                uiOutput("polyYSelect")
+              ),
+              column(
+                2,
+                tags$div(class = "section-label", "Predictor Variable (X)"),
+                uiOutput("polyXSelect")
+              ),
+              column(
+                2,
+                tags$div(class = "section-label", "Polynomial Degree"),
+                selectInput("polyDegree", NULL, choices = c("1 (Linear)" = 1, "2 (Quadratic)" = 2, "3 (Cubic)" = 3, "4 (Quartic)" = 4), selected = 3)
+              ),
+              column(
+                2,
+                tags$div(class = "section-label", "Spline Breakpoint 1"),
+                numericInput("polyKnot1", NULL, value = 6.5, step = 0.5)
+              ),
+              column(
+                2,
+                tags$div(class = "section-label", "Spline Breakpoint 2"),
+                numericInput("polyKnot2", NULL, value = 13, step = 0.5)
+              ),
+              column(
+                2,
+                tags$div(class = "section-label", "Single Breakpoint"),
+                numericInput("polySingleKnot", NULL, value = 10, step = 0.5)
+              )
+            ),
+            fluidRow(
+              column(
+                12,
+                style = "margin-top:10px;",
+                tags$div(
+                  class = "hint-text",
+                  icon("info-circle"),
+                  "For Topic 7, P5_HardWood is the default polynomial example and VoltageDrop is the default spline example."
+                )
+              )
+            ),
+            br(),
+            actionButton("runPoly", tagList(icon("play"), " Run Chapter 7 Analysis"), class = "fit-btn")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner info",
+          tags$div(class = "step-badge", "1"),
+          tags$div(
+            tags$h4("Polynomial Order Comparison"),
+            tags$p("Fit linear through quartic models to see how model order affects fit quality and residual behavior.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Polynomial Model Comparison"),
+            solidHeader = TRUE, status = "info", width = 6,
+            DTOutput("polyCompareTable")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Polynomial Fits on Scatterplot"),
+            solidHeader = TRUE, status = "info", width = 6,
+            plotOutput("polyFitPlot", height = "340px")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("calculator"), " Selected Polynomial Summary"),
+            solidHeader = TRUE, status = "info", width = 6,
+            verbatimTextOutput("polySummary")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-area"), " Residual Diagnostics by Order"),
+            solidHeader = TRUE, status = "info", width = 6,
+            plotOutput("polyResidualPlot", height = "340px")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner success",
+          tags$div(class = "step-badge", "2"),
+          tags$div(
+            tags$h4("Centering and Multicollinearity"),
+            tags$p("Centering keeps the same fitted curve while usually reducing VIF inflation in quadratic and cubic models.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("balance-scale"), " Raw vs Centered Comparison"),
+            solidHeader = TRUE, status = "success", width = 6,
+            DTOutput("polyCenterCompare")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-bar"), " VIF: Raw vs Centered"),
+            solidHeader = TRUE, status = "success", width = 6,
+            plotOutput("polyVifPlot", height = "320px")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("list-ol"), " Centering Interpretation"),
+            solidHeader = TRUE, status = "success", width = 12,
+            verbatimTextOutput("polyCenterText")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner warning",
+          tags$div(class = "step-badge", "3"),
+          tags$div(
+            tags$h4("Spline Models"),
+            tags$p("Use one-knot and two-knot splines to model piecewise changes in the response, especially for the VoltageDrop data.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Spline Model Comparison"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            DTOutput("polySplineCompare")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("project-diagram"), " Polynomial vs Cubic Spline Fit"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            plotOutput("polySplinePlot", height = "340px")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("calculator"), " Cubic Spline Summary"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            verbatimTextOutput("polySplineSummary")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Cubic Spline Residual Plot"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            plotOutput("polySplineResidualPlot", height = "340px")
+          )
+        )
+      ),
+
+      # ========================================================
+      # CHAPTER 6: LEVERAGE & INFLUENCE DIAGNOSTICS TAB
+      # ========================================================
+      tabItem(
+        tabName = "influence",
+        tags$div(
+          class = "reg-step-banner",
+          tags$div(class = "step-badge", icon("crosshairs")),
+          tags$div(
+            tags$h4("Diagnostics for Leverage and Influential Points"),
+            tags$p("Fit a multiple regression, inspect leverage and influence measures, then compare OLS with robust alternatives.")
+          )
+        ),
+        fluidRow(
+          sample_button_row(
+            "Leverage & Influence",
+            actionButton("loadSampleInfluence", tagList(icon("database"), "Load P4_RealEstate"), class = "btn btn-info"),
+            "Loads P4_RealEstate, the default dataset for Topic 6 diagnostics."
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            status = "primary", solidHeader = FALSE,
+            width = 12, style = "padding:18px;",
+            fluidRow(
+              column(
+                3,
+                tags$div(class = "section-label", "Response Variable (Y)"),
+                uiOutput("inflYSelect")
+              ),
+              column(
+                6,
+                tags$div(class = "section-label", "Predictors (X)"),
+                uiOutput("inflXSelect")
+              ),
+              column(
+                3,
+                br(),
+                actionButton("runInfluence", tagList(icon("play"), " Run Diagnostics"), class = "fit-btn")
+              )
+            ),
+            fluidRow(
+              column(
+                12,
+                style = "margin-top:10px;",
+                tags$div(
+                  class = "hint-text",
+                  icon("info-circle"),
+                  "The lecture defaults for P4_RealEstate are y ~ x1 + x2 + x3 + x4 + x5. Any numeric upload can also be analyzed here."
+                )
+              )
+            )
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner info",
+          tags$div(class = "step-badge", "1"),
+          tags$div(
+            tags$h4("Influence Measures"),
+            tags$p("Review leverage, Cook's D, DFFITS, DFBETAS, and COVRATIO using standard cutoff rules.")
+          )
+        ),
+        fluidRow(
+          valueBoxOutput("inflNBox", width = 3),
+          valueBoxOutput("inflPBox", width = 3),
+          valueBoxOutput("inflLeverageBox", width = 3),
+          valueBoxOutput("inflFlaggedBox", width = 3)
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Observation Diagnostics Table"),
+            solidHeader = TRUE, status = "info", width = 12,
+            DTOutput("inflTable")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner success",
+          tags$div(class = "step-badge", "2"),
+          tags$div(
+            tags$h4("Visual Influence Diagnostics"),
+            tags$p("Use the plots to identify cases that combine unusual predictor values with large residual impact.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("dot-circle"), " Leverage vs Studentized Residuals"),
+            solidHeader = TRUE, status = "success", width = 6,
+            plotOutput("inflBubblePlot", height = "340px")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Cook's Distance by Observation"),
+            solidHeader = TRUE, status = "success", width = 6,
+            plotOutput("inflCookPlot", height = "340px")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-area"), " DFFITS by Observation"),
+            solidHeader = TRUE, status = "success", width = 6,
+            plotOutput("inflDffitsPlot", height = "300px")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("exclamation-triangle"), " Flagged Observations"),
+            solidHeader = TRUE, status = "success", width = 6,
+            verbatimTextOutput("inflFlagSummary")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner warning",
+          tags$div(class = "step-badge", "3"),
+          tags$div(
+            tags$h4("Refit Without Selected Cases"),
+            tags$p("Compare the original fit against a trimmed OLS model after removing influential observations.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("filter"), " Removal List"),
+            solidHeader = TRUE, status = "warning", width = 12,
+            textInput("inflRemoveRows", "Observation numbers to remove (comma-separated):", value = ""),
+            tags$div(
+              class = "hint-text",
+              "The input is pre-filled from the flagged cases after running diagnostics, and you can edit it before refitting."
+            ),
+            br(),
+            actionButton("runInfluenceTrim", tagList(icon("eraser"), " Refit Without These Cases"), class = "btn btn-warning")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("balance-scale"), " Coefficient Comparison"),
+            solidHeader = TRUE, status = "warning", width = 7,
+            DTOutput("inflCoefCompare")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("list-alt"), " Model Metrics"),
+            solidHeader = TRUE, status = "warning", width = 5,
+            verbatimTextOutput("inflMetricCompare")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner",
+          tags$div(class = "step-badge", "4"),
+          tags$div(
+            tags$h4("Robust Regression"),
+            tags$p("Compare classical OLS with Huber and Tukey bisquare M-estimation instead of deleting valid but influential observations.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("shield-alt"), " Robust Model Summaries"),
+            solidHeader = TRUE, status = "primary", width = 6,
+            verbatimTextOutput("inflRobustSummary")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " OLS vs Robust Coefficients"),
+            solidHeader = TRUE, status = "primary", width = 6,
+            DTOutput("inflRobustCompare")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Huber Residuals vs Weights"),
+            solidHeader = TRUE, status = "primary", width = 6,
+            plotOutput("inflHuberPlot", height = "300px")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Bisquare Residuals vs Weights"),
+            solidHeader = TRUE, status = "primary", width = 6,
+            plotOutput("inflBisquarePlot", height = "300px")
+          )
+        )
+      ),
+
+      # ========================================================
       # CHAPTER 9: MULTICOLLINEARITY TAB
       # ========================================================
       tabItem(
@@ -2533,24 +2930,16 @@ ui <- dashboardPage(
             fluidRow(
               column(
                 3,
-                tags$div(class = "section-label", "Chapter Example"),
-                actionButton("mbLoadHald", tagList(icon("database"), " Load Hald Cement"),
-                  class = "btn btn-info"
-                ),
-                tags$div(class = "hint-text", "Uses P3_HaldsCement.xlsx from the course files.")
-              ),
-              column(
-                3,
                 tags$div(class = "section-label", "Response Variable (Y)"),
                 uiOutput("mbYSelect")
               ),
               column(
-                4,
+                6,
                 tags$div(class = "section-label", "Candidate Predictors"),
                 uiOutput("mbXSelect")
               ),
               column(
-                2,
+                3,
                 tags$div(class = "section-label", "Run"),
                 actionButton("runMB", tagList(icon("play"), " Build Models"),
                   class = "fit-btn"
@@ -2742,6 +3131,154 @@ ui <- dashboardPage(
             title = tagList(icon("chart-line"), " Residual Diagnostics"),
             solidHeader = TRUE, status = "primary", width = 12,
             plotOutput("mbFinalDiagnostics", height = "320px")
+          )
+        )
+      ),
+
+      # ========================================================
+      # CHAPTER 11: GENERALIZED LINEAR MODELS TAB
+      # ========================================================
+      tabItem(
+        tabName = "glm",
+        tags$div(
+          class = "reg-step-banner",
+          tags$div(class = "step-badge", icon("wave-square")),
+          tags$div(
+            tags$h4("Generalized Linear Models"),
+            tags$p("Fit logit, probit, and Poisson models for binary and count responses using the Topic 11 datasets.")
+          )
+        ),
+        fluidRow(
+          sample_button_row(
+            "Generalized Linear Models",
+            tagList(
+              actionButton("loadSampleGLMWellness", tagList(icon("database"), "Load Wellness"), class = "btn btn-info"),
+              actionButton("loadSampleGLMAdmit", tagList(icon("database"), "Load Admit"), class = "btn btn-info"),
+              actionButton("loadSampleGLMAwards", tagList(icon("database"), "Load Awards"), class = "btn btn-info")
+            ),
+            "Use Wellness and Admit for binary models, and Awards for Poisson count regression."
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            status = "primary", solidHeader = FALSE,
+            width = 12, style = "padding:18px;",
+            fluidRow(
+              column(
+                3,
+                tags$div(class = "section-label", "GLM Family"),
+                selectInput("glmFamily", NULL,
+                  choices = c(
+                    "Logit (Binary)" = "logit",
+                    "Probit (Binary)" = "probit",
+                    "Poisson (Count)" = "poisson"
+                  ),
+                  selected = "logit"
+                )
+              ),
+              column(
+                3,
+                tags$div(class = "section-label", "Response Variable"),
+                uiOutput("glmYSelect")
+              ),
+              column(
+                4,
+                tags$div(class = "section-label", "Predictors"),
+                uiOutput("glmXSelect")
+              ),
+              column(
+                2,
+                br(),
+                actionButton("runGLM", tagList(icon("play"), " Run GLM"), class = "fit-btn")
+              )
+            ),
+            fluidRow(
+              column(
+                12,
+                style = "margin-top:10px;",
+                tags$div(
+                  class = "hint-text",
+                  icon("info-circle"),
+                  "Recommended defaults: Wellness -> logit/probit with work, Admit -> logit/probit with gre + gpa + rank, Awards -> Poisson with prog + math."
+                )
+              )
+            )
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner info",
+          tags$div(class = "step-badge", "1"),
+          tags$div(
+            tags$h4("Model Fit and Interpretation"),
+            tags$p("Review the fitted GLM, coefficient significance, and transformed interpretation as odds ratios or incidence-rate ratios.")
+          )
+        ),
+        fluidRow(
+          valueBoxOutput("glmObsBox", width = 3),
+          valueBoxOutput("glmAICBox", width = 3),
+          valueBoxOutput("glmDevBox", width = 3),
+          valueBoxOutput("glmPerfBox", width = 3)
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("calculator"), " GLM Summary"),
+            solidHeader = TRUE, status = "info", width = 6,
+            verbatimTextOutput("glmSummary")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Coefficients and Effect Sizes"),
+            solidHeader = TRUE, status = "info", width = 6,
+            DTOutput("glmCoefTable")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner success",
+          tags$div(class = "step-badge", "2"),
+          tags$div(
+            tags$h4("Observed vs Fitted Response"),
+            tags$p("Visualize fitted probabilities or expected counts alongside the original data.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("chart-line"), " Response Curve / Fitted Counts"),
+            solidHeader = TRUE, status = "success", width = 7,
+            plotOutput("glmFitPlot", height = "360px")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("tasks"), " Performance / Model Notes"),
+            solidHeader = TRUE, status = "success", width = 5,
+            verbatimTextOutput("glmPerformanceText")
+          )
+        ),
+
+        tags$div(
+          class = "reg-step-banner warning",
+          tags$div(class = "step-badge", "3"),
+          tags$div(
+            tags$h4("Family Comparison"),
+            tags$p("For binary outcomes, compare logit and probit. For counts, compare observed and fitted rates under the Poisson model.")
+          )
+        ),
+        fluidRow(
+          box(
+            class = "reg-card",
+            title = tagList(icon("balance-scale"), " Companion Model Comparison"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            DTOutput("glmCompareTable")
+          ),
+          box(
+            class = "reg-card",
+            title = tagList(icon("table"), " Prediction Table"),
+            solidHeader = TRUE, status = "warning", width = 6,
+            DTOutput("glmPredTable")
           )
         )
       ),
@@ -4708,12 +5245,43 @@ server <- function(input, output, session) {
   observeEvent(input$runHypothesisTest, {
     req(data$raw, input$testVar1)
 
+    fmt_p <- function(p) {
+      if (is.na(p)) return("NA")
+      if (p < 0.001) return("< 0.001")
+      sprintf("%.4f", p)
+    }
+
+    decision_text <- function(p, alpha = 0.05) {
+      if (is.na(p)) return("Decision: Not available")
+      if (p < alpha) {
+        "Decision: Reject H0 at alpha = 0.05"
+      } else {
+        "Decision: Fail to reject H0 at alpha = 0.05"
+      }
+    }
+
     if (input$testType == "One-Sample T-Test") {
       test_data <- data$raw[[input$testVar1]]
 
-      output$testResults <- renderPrint({
+      output$testResults <- renderText({
         t_test <- t.test(test_data, mu = input$testMu)
-        print(t_test)
+        paste(
+          "One-Sample T-Test",
+          "",
+          sprintf("Variable: %s", input$testVar1),
+          sprintf("Sample mean: %.4f", mean(test_data, na.rm = TRUE)),
+          sprintf("Hypothesized mean (mu0): %.4f", input$testMu),
+          sprintf("t-statistic: %.4f", unname(t_test$statistic)),
+          sprintf("Degrees of freedom: %.2f", unname(t_test$parameter)),
+          sprintf("P-value: %s", fmt_p(t_test$p.value)),
+          sprintf(
+            "95%% CI: [%.4f, %.4f]",
+            t_test$conf.int[1],
+            t_test$conf.int[2]
+          ),
+          decision_text(t_test$p.value),
+          sep = "\n"
+        )
       })
 
       output$testPlot <- renderPlot({
@@ -4728,9 +5296,22 @@ server <- function(input, output, session) {
       test_data <- data$raw[[input$testVar1]]
       sample_size <- min(5000, length(test_data))
 
-      output$testResults <- renderPrint({
+      output$testResults <- renderText({
         shapiro_test <- shapiro.test(sample(test_data, sample_size))
-        print(shapiro_test)
+        paste(
+          "Shapiro-Wilk Normality Test",
+          "",
+          sprintf("Variable: %s", input$testVar1),
+          sprintf("Sample size used: %d", sample_size),
+          sprintf("W-statistic: %.4f", unname(shapiro_test$statistic)),
+          sprintf("P-value: %s", fmt_p(shapiro_test$p.value)),
+          if (shapiro_test$p.value < 0.05) {
+            "Conclusion: Evidence suggests the data are not normally distributed."
+          } else {
+            "Conclusion: No strong evidence against normality."
+          },
+          sep = "\n"
+        )
       })
 
       output$testPlot <- renderPlot({
@@ -4742,9 +5323,26 @@ server <- function(input, output, session) {
       group_var <- data$raw[[input$testVar1]]
       measure_var <- data$raw[[input$testVar2]]
 
-      output$testResults <- renderPrint({
+      output$testResults <- renderText({
         t_test <- t.test(measure_var ~ group_var)
-        print(t_test)
+        grp_levels <- unique(stats::na.omit(as.character(group_var)))
+        paste(
+          "Two-Sample T-Test",
+          "",
+          sprintf("Grouping variable: %s", input$testVar1),
+          sprintf("Measurement variable: %s", input$testVar2),
+          sprintf("Groups compared: %s", paste(grp_levels, collapse = " vs ")),
+          sprintf("t-statistic: %.4f", unname(t_test$statistic)),
+          sprintf("Degrees of freedom: %.2f", unname(t_test$parameter)),
+          sprintf("P-value: %s", fmt_p(t_test$p.value)),
+          sprintf(
+            "95%% CI of mean difference: [%.4f, %.4f]",
+            t_test$conf.int[1],
+            t_test$conf.int[2]
+          ),
+          decision_text(t_test$p.value),
+          sep = "\n"
+        )
       })
 
       output$testPlot <- renderPlot({
@@ -4762,15 +5360,28 @@ server <- function(input, output, session) {
       df_test <- data.frame(g = group_var, y = measure_var)
       df_test <- df_test[complete.cases(df_test), , drop = FALSE]
 
-      output$testResults <- renderPrint({
+      output$testResults <- renderText({
         if (nlevels(df_test$g) < 2) {
-          cat("ANOVA requires at least 2 groups.\n")
-          return()
+          return("ANOVA requires at least 2 groups.")
         }
         aov_fit <- aov(y ~ g, data = df_test)
-        cat("One-Way ANOVA (F-Test)\n")
-        cat(strrep("=", 35), "\n\n")
-        print(summary(aov_fit))
+        anova_tbl <- summary(aov_fit)[[1]]
+        f_stat <- anova_tbl$`F value`[1]
+        p_val <- anova_tbl$`Pr(>F)`[1]
+        df_between <- anova_tbl$Df[1]
+        df_within <- anova_tbl$Df[2]
+        paste(
+          "One-Way ANOVA (F-Test)",
+          "",
+          sprintf("Grouping variable: %s", input$testVar1),
+          sprintf("Measurement variable: %s", input$testVar2),
+          sprintf("Number of groups: %d", nlevels(df_test$g)),
+          sprintf("F-statistic: %.4f", f_stat),
+          sprintf("Degrees of freedom: %d, %d", df_between, df_within),
+          sprintf("P-value: %s", fmt_p(p_val)),
+          decision_text(p_val),
+          sep = "\n"
+        )
       })
 
       output$testPlot <- renderPlot({
@@ -5621,6 +6232,726 @@ server <- function(input, output, session) {
         showNotification(paste("Prediction error:", e$message), type = "error")
       }
     )
+  })
+
+  # ===== CHAPTER 7: POLYNOMIAL REGRESSION SERVER =====
+
+  poly_results <- reactiveVal(NULL)
+
+  output$polyYSelect <- renderUI({
+    req(data$numeric_vars)
+    nums <- data$numeric_vars
+    default_y <- if ("y" %in% nums) "y" else tail(nums, 1)
+    selectInput("polyY", NULL, choices = nums, selected = default_y)
+  })
+
+  output$polyXSelect <- renderUI({
+    req(data$numeric_vars)
+    nums <- data$numeric_vars
+    default_y <- if ("y" %in% nums) "y" else tail(nums, 1)
+    choices <- setdiff(nums, default_y)
+    default_x <- if ("x" %in% choices) "x" else head(choices, 1)
+    selectInput("polyX", NULL, choices = choices, selected = default_x)
+  })
+
+  poly_formula <- function(var_name = "x", degree = 1) {
+    terms <- var_name
+    if (degree >= 2) {
+      terms <- c(terms, sprintf("I(%s^%d)", var_name, 2:degree))
+    }
+    as.formula(paste("y ~", paste(terms, collapse = " + ")))
+  }
+
+  poly_safe_vif <- function(fit) {
+    tryCatch({
+      vif_obj <- car::vif(fit)
+      if (is.matrix(vif_obj)) {
+        out <- vif_obj[, 1]
+      } else {
+        out <- vif_obj
+      }
+      out <- as.numeric(out)
+      names(out) <- names(vif_obj)
+      out
+    }, error = function(e) NULL)
+  }
+
+  poly_metric_row <- function(label, fit, vif_vals = NULL) {
+    sm <- summary(fit)
+    data.frame(
+      Model = label,
+      R_Squared = sm$r.squared,
+      Adj_R_Squared = sm$adj.r.squared,
+      Residual_SE = sm$sigma,
+      AIC = AIC(fit),
+      Max_VIF = if (is.null(vif_vals) || length(vif_vals) == 0) NA_real_ else max(vif_vals, na.rm = TRUE),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  observeEvent(input$runPoly, {
+    req(data$raw, input$polyX, input$polyY)
+
+    df <- data.frame(
+      x = data$raw[[input$polyX]],
+      y = data$raw[[input$polyY]]
+    )
+    df <- df[complete.cases(df), , drop = FALSE]
+
+    if (nrow(df) < 8) {
+      showNotification("Need at least 8 complete observations for the polynomial chapter.", type = "error")
+      return()
+    }
+    if (stats::sd(df$x) == 0) {
+      showNotification("The selected X variable must vary.", type = "error")
+      return()
+    }
+
+    sel_degree <- max(1L, min(4L, as.integer(input$polyDegree %||% 3L)))
+    knot1 <- as.numeric(input$polyKnot1)
+    knot2 <- as.numeric(input$polyKnot2)
+    knot_single <- as.numeric(input$polySingleKnot)
+    knot_pair <- sort(c(knot1, knot2))
+    x_rng <- range(df$x)
+
+    if (any(!is.finite(c(knot_single, knot_pair))) || knot_pair[1] == knot_pair[2]) {
+      showNotification("Enter valid and distinct spline knots.", type = "error")
+      return()
+    }
+    if (knot_single <= x_rng[1] || knot_single >= x_rng[2] || any(knot_pair <= x_rng[1]) || any(knot_pair >= x_rng[2])) {
+      showNotification("Spline knots must lie strictly inside the range of X.", type = "error")
+      return()
+    }
+
+    raw_models <- lapply(1:4, function(d) lm(poly_formula("x", d), data = df))
+    names(raw_models) <- c("Linear", "Quadratic", "Cubic", "Quartic")
+
+    df_center <- df
+    df_center$xc <- df_center$x - mean(df_center$x)
+    centered_models <- lapply(1:4, function(d) lm(poly_formula("xc", d), data = df_center))
+    names(centered_models) <- names(raw_models)
+
+    raw_vifs <- lapply(raw_models, poly_safe_vif)
+    centered_vifs <- lapply(centered_models, poly_safe_vif)
+
+    poly_compare <- do.call(rbind, lapply(seq_along(raw_models), function(i) {
+      poly_metric_row(names(raw_models)[i], raw_models[[i]], raw_vifs[[i]])
+    }))
+
+    sel_raw <- raw_models[[sel_degree]]
+    sel_center <- centered_models[[sel_degree]]
+    sel_raw_vif <- raw_vifs[[sel_degree]]
+    sel_center_vif <- centered_vifs[[sel_degree]]
+
+    center_compare <- rbind(
+      poly_metric_row(paste0(names(raw_models)[sel_degree], " (Raw)"), sel_raw, sel_raw_vif),
+      poly_metric_row(paste0(names(raw_models)[sel_degree], " (Centered)"), sel_center, sel_center_vif)
+    )
+
+    spline_models <- list(
+      `Linear spline (1 knot)` = lm(y ~ splines::bs(x, knots = knot_single, degree = 1, intercept = TRUE), data = df),
+      `Linear spline (2 knots)` = lm(y ~ splines::bs(x, knots = knot_pair, degree = 1), data = df),
+      `Quadratic spline (2 knots)` = lm(y ~ splines::bs(x, knots = knot_pair, degree = 2), data = df),
+      `Cubic spline (2 knots)` = lm(y ~ splines::bs(x, knots = knot_pair, degree = 3), data = df)
+    )
+
+    spline_compare <- rbind(
+      poly_metric_row(paste0(names(raw_models)[sel_degree], " polynomial"), sel_raw, sel_raw_vif),
+      do.call(rbind, lapply(names(spline_models), function(label) poly_metric_row(label, spline_models[[label]])))
+    )
+
+    poly_results(list(
+      df = df,
+      df_center = df_center,
+      raw_models = raw_models,
+      centered_models = centered_models,
+      raw_vifs = raw_vifs,
+      centered_vifs = centered_vifs,
+      poly_compare = poly_compare,
+      center_compare = center_compare,
+      selected_degree = sel_degree,
+      spline_models = spline_models,
+      spline_compare = spline_compare,
+      knot_single = knot_single,
+      knot_pair = knot_pair,
+      x_label = input$polyX,
+      y_label = input$polyY
+    ))
+
+    showNotification("Polynomial regression chapter updated.", type = "message")
+  })
+
+  output$polyCompareTable <- renderDT({
+    req(poly_results())
+    tbl <- poly_results()$poly_compare
+    num_cols <- setdiff(names(tbl), "Model")
+    tbl[num_cols] <- lapply(tbl[num_cols], function(x) round(x, 4))
+    datatable(tbl, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
+
+  output$polyFitPlot <- renderPlot({
+    req(poly_results())
+    r <- poly_results()
+    plot(r$df$x, r$df$y,
+      xlab = r$x_label, ylab = r$y_label,
+      main = "Polynomial Fits by Order",
+      pch = 21, bg = "darkblue", col = "white", cex = 0.9
+    )
+    xgrid <- seq(min(r$df$x), max(r$df$x), length.out = 300)
+    cols <- c("#ef4444", "#f59e0b", "#10b981", "#2563eb")
+    for (i in seq_along(r$raw_models)) {
+      preds <- predict(r$raw_models[[i]], newdata = data.frame(x = xgrid))
+      lines(xgrid, preds, col = cols[i], lwd = 2)
+    }
+    legend("topleft", legend = names(r$raw_models), col = cols, lwd = 2, bty = "n")
+  })
+
+  output$polySummary <- renderPrint({
+    req(poly_results())
+    r <- poly_results()
+    degree_label <- names(r$raw_models)[r$selected_degree]
+    cat(degree_label, "model (raw x)\n")
+    cat(strrep("=", 45), "\n\n")
+    print(summary(r$raw_models[[r$selected_degree]]))
+    cat("\n", degree_label, "model after centering x\n", sep = "")
+    cat(strrep("=", 45), "\n\n")
+    print(summary(r$centered_models[[r$selected_degree]]))
+  })
+
+  output$polyResidualPlot <- renderPlot({
+    req(poly_results())
+    r <- poly_results()
+    old_par <- par(no.readonly = TRUE)
+    on.exit(par(old_par))
+    par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+    for (i in seq_along(r$raw_models)) {
+      fit <- r$raw_models[[i]]
+      plot(
+        fitted(fit), resid(fit),
+        pch = 19, col = "#2563eb",
+        xlab = "Fitted", ylab = "Residuals",
+        main = names(r$raw_models)[i]
+      )
+      abline(h = 0, col = "red", lwd = 2)
+      lines(lowess(fitted(fit), resid(fit)), col = "darkorange", lwd = 2)
+    }
+  })
+
+  output$polyCenterCompare <- renderDT({
+    req(poly_results())
+    tbl <- poly_results()$center_compare
+    num_cols <- setdiff(names(tbl), "Model")
+    tbl[num_cols] <- lapply(tbl[num_cols], function(x) round(x, 4))
+    datatable(tbl, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
+
+  output$polyVifPlot <- renderPlot({
+    req(poly_results())
+    r <- poly_results()
+    if (r$selected_degree == 1) {
+      plot.new()
+      text(0.5, 0.5, "VIF is not informative for a linear model with one predictor.", cex = 1.1)
+      return()
+    }
+
+    raw_vif <- r$raw_vifs[[r$selected_degree]]
+    cent_vif <- r$centered_vifs[[r$selected_degree]]
+    terms <- union(names(raw_vif), names(cent_vif))
+    mat <- rbind(
+      Raw = setNames(rep(NA_real_, length(terms)), terms),
+      Centered = setNames(rep(NA_real_, length(terms)), terms)
+    )
+    if (!is.null(raw_vif)) mat["Raw", names(raw_vif)] <- raw_vif
+    if (!is.null(cent_vif)) mat["Centered", names(cent_vif)] <- cent_vif
+    mat[is.na(mat)] <- 0
+
+    barplot(mat,
+      beside = TRUE, col = c("#ef4444", "#10b981"),
+      las = 2, ylab = "VIF", main = "Variance Inflation Factors"
+    )
+    abline(h = 5, col = "darkorange", lty = 2, lwd = 2)
+    legend("topright", legend = rownames(mat), fill = c("#ef4444", "#10b981"), bty = "n")
+  })
+
+  output$polyCenterText <- renderPrint({
+    req(poly_results())
+    r <- poly_results()
+    raw_vif <- r$raw_vifs[[r$selected_degree]]
+    cent_vif <- r$centered_vifs[[r$selected_degree]]
+
+    cat("Centering interpretation\n")
+    cat(strrep("=", 35), "\n\n")
+    cat("Selected order:", names(r$raw_models)[r$selected_degree], "\n")
+    if (r$selected_degree == 1) {
+      cat("Centering does not change the shape of a first-order fit, so there is no multicollinearity issue to solve.\n")
+      return()
+    }
+    raw_max <- if (is.null(raw_vif)) NA_real_ else max(raw_vif, na.rm = TRUE)
+    cent_max <- if (is.null(cent_vif)) NA_real_ else max(cent_vif, na.rm = TRUE)
+    cat(sprintf("Raw max VIF: %.4f\n", raw_max))
+    cat(sprintf("Centered max VIF: %.4f\n\n", cent_max))
+    cat("Centering keeps the fitted curve and R-squared essentially unchanged, but usually reduces the VIF values by removing part of the ill-conditioning in x, x^2, x^3, ...\n")
+  })
+
+  output$polySplineCompare <- renderDT({
+    req(poly_results())
+    tbl <- poly_results()$spline_compare
+    num_cols <- setdiff(names(tbl), "Model")
+    tbl[num_cols] <- lapply(tbl[num_cols], function(x) round(x, 4))
+    datatable(tbl, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
+
+  output$polySplinePlot <- renderPlot({
+    req(poly_results())
+    r <- poly_results()
+    cubic_spline <- r$spline_models[["Cubic spline (2 knots)"]]
+    poly_fit <- r$raw_models[[r$selected_degree]]
+    xgrid <- seq(min(r$df$x), max(r$df$x), length.out = 300)
+    plot(r$df$x, r$df$y,
+      xlab = r$x_label, ylab = r$y_label,
+      main = "Selected Polynomial vs Cubic Spline",
+      pch = 21, bg = "darkblue", col = "white", cex = 0.9
+    )
+    lines(xgrid, predict(poly_fit, newdata = data.frame(x = xgrid)), col = "#ef4444", lwd = 2, lty = 2)
+    lines(xgrid, predict(cubic_spline, newdata = data.frame(x = xgrid)), col = "#10b981", lwd = 2)
+    abline(v = r$knot_pair, col = "grey50", lty = 3)
+    legend("topleft",
+      legend = c(paste(names(r$raw_models)[r$selected_degree], "polynomial"), "Cubic spline", "Knots"),
+      col = c("#ef4444", "#10b981", "grey50"),
+      lty = c(2, 1, 3), lwd = c(2, 2, 1), bty = "n"
+    )
+  })
+
+  output$polySplineSummary <- renderPrint({
+    req(poly_results())
+    r <- poly_results()
+    cat("Cubic spline with two knots\n")
+    cat(strrep("=", 35), "\n")
+    cat("Knots:", paste(r$knot_pair, collapse = ", "), "\n\n")
+    print(summary(r$spline_models[["Cubic spline (2 knots)"]]))
+  })
+
+  output$polySplineResidualPlot <- renderPlot({
+    req(poly_results())
+    fit <- poly_results()$spline_models[["Cubic spline (2 knots)"]]
+    plot(
+      fitted(fit), resid(fit),
+      xlab = "Fitted", ylab = "Residuals",
+      main = "Cubic Spline Residuals vs Fitted",
+      pch = 19, col = "#10b981"
+    )
+    abline(h = 0, col = "red", lwd = 2)
+    lines(lowess(fitted(fit), resid(fit)), col = "darkorange", lwd = 2)
+  })
+
+  # ===== CHAPTER 6: LEVERAGE & INFLUENCE SERVER =====
+
+  influence_results <- reactiveVal(NULL)
+  influence_trim_fit <- reactiveVal(NULL)
+
+  infl_bt <- function(x) paste0("`", gsub("`", "``", x), "`")
+
+  output$inflYSelect <- renderUI({
+    req(data$numeric_vars)
+    nums <- data$numeric_vars
+    if (length(nums) < 2) {
+      return(helpText("Need at least two numeric variables to run influence diagnostics."))
+    }
+    default_y <- if ("y" %in% nums) "y" else tail(nums, 1)
+    selectInput("inflY", NULL, choices = nums, selected = default_y)
+  })
+
+  output$inflXSelect <- renderUI({
+    req(data$numeric_vars)
+    nums <- data$numeric_vars
+    default_y <- if ("y" %in% nums) "y" else tail(nums, 1)
+    choices <- setdiff(nums, default_y)
+    default_x <- intersect(c("x1", "x2", "x3", "x4", "x5"), choices)
+    if (length(default_x) == 0) {
+      default_x <- head(choices, min(5, length(choices)))
+    }
+    selectizeInput("inflX", NULL,
+      choices = choices,
+      selected = default_x,
+      multiple = TRUE,
+      options = list(placeholder = "Choose one or more predictors")
+    )
+  })
+
+  observeEvent(input$runInfluence, {
+    req(data$raw, input$inflY, input$inflX)
+
+    if (length(input$inflX) == 0) {
+      showNotification("Select at least one predictor for the influence model.", type = "error")
+      return()
+    }
+
+    selected <- unique(c(input$inflY, input$inflX))
+    raw_df <- as.data.frame(data$raw[, selected, drop = FALSE], check.names = FALSE)
+    keep_rows <- complete.cases(raw_df)
+    model_df <- raw_df[keep_rows, , drop = FALSE]
+    row_id <- which(keep_rows)
+
+    if (nrow(model_df) <= length(input$inflX) + 2) {
+      showNotification("Not enough complete observations for the selected regression model.", type = "error")
+      return()
+    }
+
+    model_formula <- as.formula(paste(infl_bt(input$inflY), "~", paste(infl_bt(input$inflX), collapse = " + ")))
+    fit <- lm(model_formula, data = model_df)
+
+    stud <- stats::rstudent(fit)
+    hat <- stats::hatvalues(fit)
+    cook <- stats::cooks.distance(fit)
+    dff <- stats::dffits(fit)
+    covr <- stats::covratio(fit)
+    dfb <- stats::dfbetas(fit)
+
+    n_obs <- nrow(model_df)
+    p_params <- length(coef(fit))
+    leverage_cutoff <- 2 * p_params / n_obs
+    cook_cutoff <- 4 / n_obs
+    dffits_cutoff <- 2 * sqrt(p_params / n_obs)
+    dfbetas_cutoff <- 2 / sqrt(n_obs)
+    covratio_low <- 1 - 3 * p_params / n_obs
+    covratio_high <- 1 + 3 * p_params / n_obs
+
+    max_abs_dfb <- if (is.null(dim(dfb))) abs(dfb) else apply(abs(dfb), 1, max, na.rm = TRUE)
+
+    diag_tbl <- data.frame(
+      Observation = row_id,
+      Studentized_Residual = as.numeric(stud),
+      Leverage = as.numeric(hat),
+      Cooks_D = as.numeric(cook),
+      DFFITS = as.numeric(dff),
+      Max_abs_DFBETAS = as.numeric(max_abs_dfb),
+      COVRATIO = as.numeric(covr),
+      stringsAsFactors = FALSE
+    )
+
+    diag_tbl$High_Leverage <- diag_tbl$Leverage > leverage_cutoff
+    diag_tbl$Cook_Flag <- diag_tbl$Cooks_D > cook_cutoff
+    diag_tbl$DFFITS_Flag <- abs(diag_tbl$DFFITS) > dffits_cutoff
+    diag_tbl$DFBETAS_Flag <- diag_tbl$Max_abs_DFBETAS > dfbetas_cutoff
+    diag_tbl$COVRATIO_Flag <- diag_tbl$COVRATIO < covratio_low | diag_tbl$COVRATIO > covratio_high
+    diag_tbl$Flag_Count <- rowSums(diag_tbl[, c("High_Leverage", "Cook_Flag", "DFFITS_Flag", "DFBETAS_Flag", "COVRATIO_Flag")])
+    diag_tbl$Flagged <- ifelse(diag_tbl$Flag_Count > 0, "Yes", "")
+
+    flagged_ids <- diag_tbl$Observation[diag_tbl$Flag_Count > 0]
+    updateTextInput(session, "inflRemoveRows", value = paste(flagged_ids, collapse = ", "))
+
+    robust_huber <- tryCatch(MASS::rlm(model_formula, data = model_df, psi = MASS::psi.huber), error = function(e) NULL)
+    robust_bisquare <- tryCatch(MASS::rlm(model_formula, data = model_df, psi = MASS::psi.bisquare), error = function(e) NULL)
+
+    influence_results(list(
+      fit = fit,
+      formula = model_formula,
+      model_df = model_df,
+      row_id = row_id,
+      xvars = input$inflX,
+      yvar = input$inflY,
+      diag_tbl = diag_tbl,
+      n_obs = n_obs,
+      p_params = p_params,
+      cutoffs = list(
+        leverage = leverage_cutoff,
+        cook = cook_cutoff,
+        dffits = dffits_cutoff,
+        dfbetas = dfbetas_cutoff,
+        covratio_low = covratio_low,
+        covratio_high = covratio_high
+      ),
+      robust_huber = robust_huber,
+      robust_bisquare = robust_bisquare
+    ))
+    influence_trim_fit(NULL)
+
+    showNotification("Influence diagnostics updated.", type = "message")
+  })
+
+  output$inflNBox <- renderValueBox({
+    req(influence_results())
+    valueBox(influence_results()$n_obs, "Usable Observations", icon = icon("table"), color = "blue")
+  })
+
+  output$inflPBox <- renderValueBox({
+    req(influence_results())
+    valueBox(influence_results()$p_params - 1, "Predictors in Model", icon = icon("sliders-h"), color = "teal")
+  })
+
+  output$inflLeverageBox <- renderValueBox({
+    req(influence_results())
+    valueBox(sprintf("%.3f", influence_results()$cutoffs$leverage), "Leverage Cutoff", icon = icon("crosshairs"), color = "yellow")
+  })
+
+  output$inflFlaggedBox <- renderValueBox({
+    req(influence_results())
+    flagged_n <- sum(influence_results()$diag_tbl$Flag_Count > 0)
+    valueBox(flagged_n, "Flagged Observations", icon = icon("exclamation-triangle"), color = if (flagged_n > 0) "red" else "green")
+  })
+
+  output$inflTable <- renderDT({
+    req(influence_results())
+    tbl <- influence_results()$diag_tbl
+    show_tbl <- tbl
+    logical_cols <- c("High_Leverage", "Cook_Flag", "DFFITS_Flag", "DFBETAS_Flag", "COVRATIO_Flag")
+    show_tbl[logical_cols] <- lapply(show_tbl[logical_cols], function(x) ifelse(x, "Yes", ""))
+    numeric_cols <- setdiff(names(show_tbl), c("Observation", "Flagged", logical_cols))
+    show_tbl[numeric_cols] <- lapply(show_tbl[numeric_cols], function(x) round(x, 4))
+    datatable(
+      show_tbl,
+      rownames = FALSE,
+      options = list(pageLength = 10, scrollX = TRUE)
+    )
+  })
+
+  output$inflBubblePlot <- renderPlot({
+    req(influence_results())
+    d <- influence_results()
+    tbl <- d$diag_tbl
+    cook_vals <- tbl$Cooks_D
+    cook_range <- range(cook_vals, finite = TRUE)
+    if (!all(is.finite(cook_range)) || diff(cook_range) < 1e-12) {
+      bubble_cex <- rep(1.8, length(cook_vals))
+    } else {
+      bubble_cex <- 0.8 + (cook_vals - cook_range[1]) / diff(cook_range) * (3.4 - 0.8)
+    }
+    plot(
+      tbl$Leverage, tbl$Studentized_Residual,
+      pch = 21, bg = ifelse(tbl$Flag_Count > 0, "#f97316", "#2563eb"),
+      col = "#0f172a", cex = bubble_cex,
+      xlab = "Leverage (hii)", ylab = "Studentized Residual",
+      main = "Leverage vs Studentized Residuals"
+    )
+    abline(v = d$cutoffs$leverage, col = "darkorange", lty = 2, lwd = 2)
+    abline(h = c(-2, 2), col = "red", lty = 3, lwd = 1.5)
+    flagged <- tbl$Flag_Count > 0
+    if (any(flagged)) {
+      text(tbl$Leverage[flagged], tbl$Studentized_Residual[flagged], labels = tbl$Observation[flagged], pos = 3, cex = 0.8)
+    }
+    legend(
+      "topright",
+      legend = c("Flagged case", "Other case"),
+      pt.bg = c("#f97316", "#2563eb"),
+      pch = 21, bty = "n"
+    )
+  })
+
+  output$inflCookPlot <- renderPlot({
+    req(influence_results())
+    d <- influence_results()
+    tbl <- d$diag_tbl
+    plot(
+      tbl$Observation, tbl$Cooks_D,
+      type = "h", lwd = 2,
+      col = ifelse(tbl$Cooks_D > d$cutoffs$cook, "#dc2626", "#2563eb"),
+      xlab = "Observation", ylab = "Cook's D",
+      main = "Cook's Distance"
+    )
+    points(tbl$Observation, tbl$Cooks_D, pch = 19, col = ifelse(tbl$Cooks_D > d$cutoffs$cook, "#dc2626", "#2563eb"))
+    abline(h = d$cutoffs$cook, col = "darkorange", lty = 2, lwd = 2)
+  })
+
+  output$inflDffitsPlot <- renderPlot({
+    req(influence_results())
+    d <- influence_results()
+    tbl <- d$diag_tbl
+    plot(
+      tbl$Observation, tbl$DFFITS,
+      type = "h", lwd = 2,
+      col = ifelse(abs(tbl$DFFITS) > d$cutoffs$dffits, "#dc2626", "#2563eb"),
+      xlab = "Observation", ylab = "DFFITS",
+      main = "DFFITS"
+    )
+    points(tbl$Observation, tbl$DFFITS, pch = 19, col = ifelse(abs(tbl$DFFITS) > d$cutoffs$dffits, "#dc2626", "#2563eb"))
+    abline(h = c(-d$cutoffs$dffits, d$cutoffs$dffits), col = "darkorange", lty = 2, lwd = 2)
+  })
+
+  output$inflFlagSummary <- renderPrint({
+    req(influence_results())
+    d <- influence_results()
+    tbl <- d$diag_tbl
+    flagged <- tbl[tbl$Flag_Count > 0, , drop = FALSE]
+
+    cat("Cutoff rules used\n")
+    cat(strrep("=", 35), "\n")
+    cat(sprintf("Leverage > %.4f\n", d$cutoffs$leverage))
+    cat(sprintf("Cook's D > %.4f\n", d$cutoffs$cook))
+    cat(sprintf("|DFFITS| > %.4f\n", d$cutoffs$dffits))
+    cat(sprintf("Max |DFBETAS| > %.4f\n", d$cutoffs$dfbetas))
+    cat(sprintf("COVRATIO outside [%.4f, %.4f]\n\n", d$cutoffs$covratio_low, d$cutoffs$covratio_high))
+
+    if (nrow(flagged) == 0) {
+      cat("No observations were flagged by these rules.\n")
+    } else {
+      cat("Flagged observations:\n")
+      cat(paste(flagged$Observation, collapse = ", "), "\n\n")
+      top_tbl <- flagged[order(-flagged$Flag_Count, -flagged$Cooks_D), c("Observation", "Flag_Count", "Leverage", "Cooks_D", "DFFITS", "Max_abs_DFBETAS", "COVRATIO")]
+      print(round(top_tbl, 4), row.names = FALSE)
+    }
+  })
+
+  observeEvent(input$runInfluenceTrim, {
+    req(influence_results())
+    d <- influence_results()
+    raw_ids <- trimws(input$inflRemoveRows %||% "")
+    if (!nzchar(raw_ids)) {
+      showNotification("Enter at least one observation number to remove.", type = "warning")
+      return()
+    }
+
+    ids <- suppressWarnings(as.integer(unlist(strsplit(gsub("[^0-9,]+", "", raw_ids), ","))))
+    ids <- unique(ids[!is.na(ids)])
+    ids <- ids[ids %in% d$row_id]
+
+    if (length(ids) == 0) {
+      showNotification("None of the entered observation numbers matched the fitted model rows.", type = "error")
+      return()
+    }
+
+    keep <- !(d$row_id %in% ids)
+    trimmed_df <- d$model_df[keep, , drop = FALSE]
+    if (nrow(trimmed_df) <= length(d$xvars) + 2) {
+      showNotification("Too few observations would remain after deletion.", type = "error")
+      return()
+    }
+
+    trim_fit <- lm(d$formula, data = trimmed_df)
+    influence_trim_fit(list(
+      fit = trim_fit,
+      removed = ids,
+      kept_rows = d$row_id[keep],
+      n_obs = nrow(trimmed_df)
+    ))
+    showNotification("Trimmed OLS model refit successfully.", type = "message")
+  })
+
+  output$inflCoefCompare <- renderDT({
+    req(influence_results(), influence_trim_fit())
+    base_fit <- influence_results()$fit
+    trim_fit <- influence_trim_fit()$fit
+    coef_names <- union(names(coef(base_fit)), names(coef(trim_fit)))
+    comp <- data.frame(
+      Term = coef_names,
+      `OLS (All Data)` = coef(base_fit)[coef_names],
+      `OLS (Trimmed)` = coef(trim_fit)[coef_names],
+      Change = coef(trim_fit)[coef_names] - coef(base_fit)[coef_names],
+      check.names = FALSE
+    )
+    comp[is.na(comp)] <- NA_real_
+    comp[-1] <- lapply(comp[-1], round, 4)
+    datatable(comp, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
+
+  output$inflMetricCompare <- renderPrint({
+    req(influence_results(), influence_trim_fit())
+    base_fit <- influence_results()$fit
+    trim_fit <- influence_trim_fit()$fit
+    removed <- influence_trim_fit()$removed
+
+    cat("Original vs Trimmed OLS\n")
+    cat(strrep("=", 35), "\n")
+    cat("Removed observations:", paste(removed, collapse = ", "), "\n\n")
+
+    metric_tbl <- data.frame(
+      Model = c("OLS (All Data)", "OLS (Trimmed)"),
+      Observations = c(length(resid(base_fit)), length(resid(trim_fit))),
+      R_Squared = c(summary(base_fit)$r.squared, summary(trim_fit)$r.squared),
+      Adj_R_Squared = c(summary(base_fit)$adj.r.squared, summary(trim_fit)$adj.r.squared),
+      Residual_SE = c(summary(base_fit)$sigma, summary(trim_fit)$sigma),
+      AIC = c(AIC(base_fit), AIC(trim_fit)),
+      check.names = FALSE
+    )
+    print(round(metric_tbl, 4), row.names = FALSE)
+  })
+
+  output$inflRobustSummary <- renderPrint({
+    req(influence_results())
+    d <- influence_results()
+
+    cat("Robust regression summaries\n")
+    cat(strrep("=", 40), "\n\n")
+
+    cat("OLS residual standard error:", round(summary(d$fit)$sigma, 4), "\n\n")
+
+    if (!is.null(d$robust_huber)) {
+      sh <- summary(d$robust_huber)
+      cat("Huber M-estimation\n")
+      cat(strrep("-", 28), "\n")
+      print(round(sh$coefficients, 4))
+      cat("Scale estimate:", round(sh$sigma, 4), "\n\n")
+    } else {
+      cat("Huber model could not be fit.\n\n")
+    }
+
+    if (!is.null(d$robust_bisquare)) {
+      sb <- summary(d$robust_bisquare)
+      cat("Tukey bisquare M-estimation\n")
+      cat(strrep("-", 28), "\n")
+      print(round(sb$coefficients, 4))
+      cat("Scale estimate:", round(sb$sigma, 4), "\n")
+    } else {
+      cat("Bisquare model could not be fit.\n")
+    }
+  })
+
+  output$inflRobustCompare <- renderDT({
+    req(influence_results())
+    d <- influence_results()
+    model_list <- list(`OLS` = d$fit)
+    if (!is.null(d$robust_huber)) model_list$Huber <- d$robust_huber
+    if (!is.null(d$robust_bisquare)) model_list$Bisquare <- d$robust_bisquare
+
+    coef_names <- Reduce(union, lapply(model_list, function(m) names(coef(m))))
+    rows <- lapply(names(model_list), function(label) {
+      fit_obj <- model_list[[label]]
+      vals <- setNames(rep(NA_real_, length(coef_names)), coef_names)
+      vals[names(coef(fit_obj))] <- coef(fit_obj)
+      data.frame(
+        Model = label,
+        t(vals),
+        Residual_SE = if (inherits(fit_obj, "rlm")) summary(fit_obj)$sigma else summary(fit_obj)$sigma,
+        check.names = FALSE
+      )
+    })
+    tbl <- do.call(rbind, rows)
+    num_cols <- setdiff(names(tbl), "Model")
+    tbl[num_cols] <- lapply(tbl[num_cols], function(x) round(as.numeric(x), 4))
+    datatable(tbl, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
+
+  output$inflHuberPlot <- renderPlot({
+    req(influence_results())
+    fit_obj <- influence_results()$robust_huber
+    if (is.null(fit_obj)) {
+      plot.new()
+      text(0.5, 0.5, "Huber robust model unavailable.")
+      return()
+    }
+    plot(
+      resid(fit_obj), fit_obj$w,
+      pch = 19, col = "darkgreen",
+      xlab = "Residuals", ylab = "Weights",
+      main = "Huber's Residuals vs Weights"
+    )
+    abline(v = 0, col = "red", lty = 2)
+  })
+
+  output$inflBisquarePlot <- renderPlot({
+    req(influence_results())
+    fit_obj <- influence_results()$robust_bisquare
+    if (is.null(fit_obj)) {
+      plot.new()
+      text(0.5, 0.5, "Bisquare robust model unavailable.")
+      return()
+    }
+    plot(
+      resid(fit_obj), fit_obj$w,
+      pch = 19, col = "darkorange",
+      xlab = "Residuals", ylab = "Weights",
+      main = "Bisquare Residuals vs Weights"
+    )
+    abline(v = 0, col = "red", lty = 2)
   })
 
   # ===== CHAPTER 9: MULTICOLLINEARITY SERVER =====
@@ -6561,21 +7892,6 @@ server <- function(input, output, session) {
     list(selected = selected, trace = trace, steps = step_tbl)
   }
 
-  observeEvent(input$mbLoadHald, {
-    tryCatch(
-      load_course_dataset(
-        "P3_HaldsCement.xlsx",
-        selected_tab = "modelbuilding",
-        success_message = "Hald cement data loaded for Topic 10.",
-        post_load = function() {
-          mb_results(NULL)
-          mb_final_model(NULL)
-        }
-      ),
-      error = function(e) showNotification(conditionMessage(e), type = "error")
-    )
-  })
-
   output$mbYSelect <- renderUI({
     req(data$numeric_vars)
     selected <- if ("y" %in% data$numeric_vars) "y" else data$numeric_vars[1]
@@ -7045,6 +8361,289 @@ server <- function(input, output, session) {
     abline(h = 0, col = "red", lwd = 2)
   })
 
+  # ===== CHAPTER 11: GENERALIZED LINEAR MODELS SERVER =====
+
+  glm_results <- reactiveVal(NULL)
+
+  glm_bt <- function(x) paste0("`", gsub("`", "``", x), "`")
+
+  glm_default_x <- function(y_name, choices) {
+    if (identical(y_name, "wellness") && "work" %in% choices) return("work")
+    if (identical(y_name, "admit")) {
+      wanted <- intersect(c("gre", "gpa", "rank"), choices)
+      if (length(wanted) > 0) return(wanted)
+    }
+    if (identical(y_name, "num_awards")) {
+      wanted <- intersect(c("prog", "math"), choices)
+      if (length(wanted) > 0) return(wanted)
+    }
+    head(choices, min(2, length(choices)))
+  }
+
+  output$glmYSelect <- renderUI({
+    req(names(data$raw))
+    fam <- input$glmFamily %||% "logit"
+    candidates <- names(data$raw)
+    selected <- switch(fam,
+      logit = if ("wellness" %in% candidates) "wellness" else if ("admit" %in% candidates) "admit" else candidates[1],
+      probit = if ("wellness" %in% candidates) "wellness" else if ("admit" %in% candidates) "admit" else candidates[1],
+      poisson = if ("num_awards" %in% candidates) "num_awards" else candidates[1]
+    )
+    selectInput("glmY", NULL, choices = candidates, selected = selected)
+  })
+
+  output$glmXSelect <- renderUI({
+    req(names(data$raw), input$glmY)
+    choices <- setdiff(names(data$raw), input$glmY)
+    selected <- glm_default_x(input$glmY, choices)
+    selectizeInput("glmX", NULL, choices = choices, selected = selected, multiple = TRUE)
+  })
+
+  observeEvent(input$glmFamily, {
+    req(names(data$raw))
+    all_names <- names(data$raw)
+    if (isTRUE(input$glmFamily %in% c("logit", "probit"))) {
+      y_sel <- if ("wellness" %in% all_names) "wellness" else if ("admit" %in% all_names) "admit" else all_names[1]
+    } else {
+      y_sel <- if ("num_awards" %in% all_names) "num_awards" else all_names[1]
+    }
+    updateSelectInput(session, "glmY", choices = all_names, selected = y_sel)
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$glmY, {
+    req(names(data$raw), input$glmY)
+    x_choices <- setdiff(names(data$raw), input$glmY)
+    updateSelectizeInput(
+      session, "glmX",
+      choices = x_choices,
+      selected = glm_default_x(input$glmY, x_choices),
+      server = TRUE
+    )
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$runGLM, {
+    req(data$raw, input$glmY, input$glmX)
+    if (length(input$glmX) == 0) {
+      showNotification("Select at least one predictor for the GLM.", type = "error")
+      return()
+    }
+
+    fam <- input$glmFamily %||% "logit"
+    df <- as.data.frame(data$raw[, c(input$glmY, input$glmX), drop = FALSE], check.names = FALSE)
+    df <- df[complete.cases(df), , drop = FALSE]
+    if (nrow(df) < 10) {
+      showNotification("Need at least 10 complete observations for this GLM.", type = "error")
+      return()
+    }
+
+    y_name <- input$glmY
+    x_names <- input$glmX
+
+    for (nm in x_names) {
+      if (nm %in% c("rank", "prog")) {
+        df[[nm]] <- factor(df[[nm]])
+      } else if (!is.numeric(df[[nm]])) {
+        df[[nm]] <- factor(df[[nm]])
+      }
+    }
+
+    if (fam %in% c("logit", "probit")) {
+      y_vals <- df[[y_name]]
+      uniq <- sort(unique(y_vals))
+      if (!all(uniq %in% c(0, 1))) {
+        if (length(uniq) == 2) {
+          df[[y_name]] <- as.numeric(factor(y_vals)) - 1
+        } else {
+          showNotification("Binary GLMs require a response coded with two levels.", type = "error")
+          return()
+        }
+      }
+    } else {
+      y_vals <- df[[y_name]]
+      if (any(y_vals < 0, na.rm = TRUE) || any(abs(y_vals - round(y_vals)) > 1e-8, na.rm = TRUE)) {
+        showNotification("Poisson regression requires a non-negative integer count response.", type = "error")
+        return()
+      }
+    }
+
+    glm_formula <- as.formula(paste(glm_bt(y_name), "~", paste(vapply(x_names, glm_bt, character(1)), collapse = " + ")))
+    fam_obj <- switch(fam,
+      logit = binomial(link = "logit"),
+      probit = binomial(link = "probit"),
+      poisson = poisson(link = "log")
+    )
+    fit <- glm(glm_formula, family = fam_obj, data = df)
+
+    companion <- NULL
+    if (fam %in% c("logit", "probit")) {
+      other_fam <- if (fam == "logit") binomial(link = "probit") else binomial(link = "logit")
+      companion <- glm(glm_formula, family = other_fam, data = df)
+    }
+
+    fitted_vals <- fitted(fit)
+    perf_value <- if (fam %in% c("logit", "probit")) {
+      mean((fitted_vals >= 0.5) == df[[y_name]])
+    } else {
+      sqrt(mean((df[[y_name]] - fitted_vals)^2))
+    }
+    perf_label <- if (fam %in% c("logit", "probit")) "Accuracy" else "RMSE"
+
+    coef_mat <- summary(fit)$coefficients
+    coef_tbl <- data.frame(
+      Term = rownames(coef_mat),
+      Estimate = coef_mat[, "Estimate"],
+      Std_Error = coef_mat[, "Std. Error"],
+      Z_Value = coef_mat[, "z value"],
+      P_Value = coef_mat[, "Pr(>|z|)"],
+      Effect = exp(coef_mat[, "Estimate"]),
+      check.names = FALSE
+    )
+    names(coef_tbl)[6] <- if (fam %in% c("logit", "probit")) "Odds Ratio" else "Incidence Rate Ratio"
+
+    pred_tbl <- cbind(df[, c(y_name, x_names), drop = FALSE], Fitted = fitted_vals)
+    pred_tbl <- pred_tbl[seq_len(min(12, nrow(pred_tbl))), , drop = FALSE]
+
+    compare_tbl <- if (is.null(companion)) {
+      data.frame(
+        Model = "Poisson",
+        AIC = AIC(fit),
+        Null_Deviance = fit$null.deviance,
+        Residual_Deviance = fit$deviance,
+        Pseudo_R2 = 1 - fit$deviance / fit$null.deviance,
+        check.names = FALSE
+      )
+    } else {
+      data.frame(
+        Model = c(if (fam == "logit") "Logit" else "Probit", if (fam == "logit") "Probit" else "Logit"),
+        AIC = c(AIC(fit), AIC(companion)),
+        Null_Deviance = c(fit$null.deviance, companion$null.deviance),
+        Residual_Deviance = c(fit$deviance, companion$deviance),
+        Pseudo_R2 = c(1 - fit$deviance / fit$null.deviance, 1 - companion$deviance / companion$null.deviance),
+        check.names = FALSE
+      )
+    }
+
+    glm_results(list(
+      family = fam,
+      fit = fit,
+      companion = companion,
+      data = df,
+      y_name = y_name,
+      x_names = x_names,
+      coef_tbl = coef_tbl,
+      pred_tbl = pred_tbl,
+      compare_tbl = compare_tbl,
+      perf_value = perf_value,
+      perf_label = perf_label
+    ))
+
+    showNotification("GLM analysis completed.", type = "message")
+  })
+
+  output$glmObsBox <- renderValueBox({
+    req(glm_results())
+    valueBox(nrow(glm_results()$data), "Usable Observations", icon = icon("table"), color = "blue")
+  })
+
+  output$glmAICBox <- renderValueBox({
+    req(glm_results())
+    valueBox(sprintf("%.2f", AIC(glm_results()$fit)), "AIC", icon = icon("balance-scale"), color = "teal")
+  })
+
+  output$glmDevBox <- renderValueBox({
+    req(glm_results())
+    valueBox(sprintf("%.2f", glm_results()$fit$deviance), "Residual Deviance", icon = icon("chart-line"), color = "yellow")
+  })
+
+  output$glmPerfBox <- renderValueBox({
+    req(glm_results())
+    valueBox(sprintf("%.3f", glm_results()$perf_value), glm_results()$perf_label, icon = icon("bullseye"), color = "green")
+  })
+
+  output$glmSummary <- renderPrint({
+    req(glm_results())
+    print(summary(glm_results()$fit))
+  })
+
+  output$glmCoefTable <- renderDT({
+    req(glm_results())
+    tbl <- glm_results()$coef_tbl
+    num_cols <- setdiff(names(tbl), "Term")
+    tbl[num_cols] <- lapply(tbl[num_cols], function(x) round(x, 4))
+    datatable(tbl, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
+
+  output$glmFitPlot <- renderPlot({
+    req(glm_results())
+    r <- glm_results()
+    df <- r$data
+    x_num <- r$x_names[vapply(df[r$x_names], is.numeric, logical(1))]
+
+    if (length(r$x_names) == 1 && length(x_num) == 1) {
+      xnm <- x_num[1]
+      xgrid <- seq(min(df[[xnm]]), max(df[[xnm]]), length.out = 200)
+      newdata <- setNames(data.frame(xgrid), xnm)
+      preds <- predict(r$fit, newdata = newdata, type = "response")
+      plot(
+        df[[xnm]], df[[r$y_name]],
+        xlab = xnm, ylab = r$y_name,
+        pch = 19, col = "darkblue",
+        main = "Observed Response and Fitted Curve"
+      )
+      lines(xgrid, preds, col = "darkgreen", lwd = 2)
+      if (!is.null(r$companion)) {
+        preds2 <- predict(r$companion, newdata = newdata, type = "response")
+        lines(xgrid, preds2, col = "darkorange", lwd = 2, lty = 2)
+        legend("topleft", legend = c("Primary fit", "Companion fit"), col = c("darkgreen", "darkorange"), lwd = 2, lty = c(1, 2), bty = "n")
+      }
+    } else {
+      plot(
+        seq_len(nrow(df)), df[[r$y_name]],
+        xlab = "Observation", ylab = r$y_name,
+        pch = 19, col = "darkblue",
+        main = "Observed vs Fitted"
+      )
+      points(seq_len(nrow(df)), fitted(r$fit), pch = 17, col = "darkgreen")
+      legend("topleft", legend = c("Observed", "Fitted"), col = c("darkblue", "darkgreen"), pch = c(19, 17), bty = "n")
+    }
+  })
+
+  output$glmPerformanceText <- renderPrint({
+    req(glm_results())
+    r <- glm_results()
+    cat("Model notes\n")
+    cat(strrep("=", 28), "\n")
+    cat("Family:", switch(r$family, logit = "Logit", probit = "Probit", poisson = "Poisson"), "\n")
+    cat("Formula:", deparse(formula(r$fit)), "\n")
+    cat(sprintf("AIC: %.4f\n", AIC(r$fit)))
+    cat(sprintf("Null deviance: %.4f\n", r$fit$null.deviance))
+    cat(sprintf("Residual deviance: %.4f\n", r$fit$deviance))
+    if (r$family %in% c("logit", "probit")) {
+      cat(sprintf("Classification accuracy at 0.5 cutoff: %.4f\n", r$perf_value))
+      cat("Binary coefficients are interpreted on the log-odds or latent-normal scale, and exponentiating them gives multiplicative changes in odds.\n")
+    } else {
+      cat(sprintf("Root mean squared error: %.4f\n", r$perf_value))
+      cat("Poisson coefficients are interpreted on the log-count scale, and exponentiating them gives multiplicative changes in expected count.\n")
+    }
+  })
+
+  output$glmCompareTable <- renderDT({
+    req(glm_results())
+    tbl <- glm_results()$compare_tbl
+    num_cols <- setdiff(names(tbl), "Model")
+    tbl[num_cols] <- lapply(tbl[num_cols], function(x) round(x, 4))
+    datatable(tbl, rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
+
+  output$glmPredTable <- renderDT({
+    req(glm_results())
+    tbl <- glm_results()$pred_tbl
+    for (nm in names(tbl)) {
+      if (is.numeric(tbl[[nm]])) tbl[[nm]] <- round(tbl[[nm]], 4)
+    }
+    datatable(tbl, rownames = FALSE, options = list(pageLength = min(10, nrow(tbl)), scrollX = TRUE))
+  })
+
   # ===== INDICATOR VARIABLE SERVER =====
 
   output$indYSelect <- renderUI({
@@ -7127,8 +8726,7 @@ server <- function(input, output, session) {
   observeEvent(input$darkModeToggle,
     {
       session$sendCustomMessage("setDarkMode", list(enabled = isTRUE(input$darkModeToggle)))
-    },
-    ignoreInit = TRUE
+    }
   )
 
   # Quick actions
@@ -7162,6 +8760,57 @@ server <- function(input, output, session) {
   observeEvent(input$loadSampleMLR, {
     tryCatch(
       load_course_dataset("P2_DeliveryTime.xlsx", "mlr", "P2 Delivery Time sample data loaded for MLR."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSamplePolyP5, {
+    tryCatch(
+      load_course_dataset("P5_HardWood.xlsx", "polyreg", "P5 HardWood sample data loaded for polynomial regression."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSamplePolyVoltage, {
+    tryCatch(
+      load_course_dataset("VoltageDrop.xlsx", "polyreg", "Voltage Drop sample data loaded for spline regression."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleInfluence, {
+    tryCatch(
+      load_course_dataset("P4_RealEstate.xlsx", "influence", "P4 Real Estate sample data loaded for leverage and influence diagnostics."),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleGLMWellness, {
+    tryCatch(
+      load_course_dataset(
+        "Wellness.xlsx", "glm", "Wellness sample data loaded for binary GLM analysis.",
+        post_load = function() updateSelectInput(session, "glmFamily", selected = "logit")
+      ),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleGLMAdmit, {
+    tryCatch(
+      load_course_dataset(
+        "Admit.xlsx", "glm", "Admit sample data loaded for binary GLM analysis.",
+        post_load = function() updateSelectInput(session, "glmFamily", selected = "logit")
+      ),
+      error = function(e) showNotification(conditionMessage(e), type = "error")
+    )
+  })
+
+  observeEvent(input$loadSampleGLMAwards, {
+    tryCatch(
+      load_course_dataset(
+        "Awards.xlsx", "glm", "Awards sample data loaded for Poisson GLM analysis.",
+        post_load = function() updateSelectInput(session, "glmFamily", selected = "poisson")
+      ),
       error = function(e) showNotification(conditionMessage(e), type = "error")
     )
   })
