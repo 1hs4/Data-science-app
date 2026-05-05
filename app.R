@@ -8,7 +8,6 @@ library(shinydashboard)
 library(DT)
 library(readxl)
 library(moments)
-library(corrplot)
 library(RColorBrewer)
 library(BSDA)
 library(plotrix)
@@ -46,7 +45,6 @@ app_sections <- list(
   list(tab = "upload", label = "Upload Data", icon = "upload"),
   list(tab = "preview", label = "Data Preview", icon = "table"),
   list(tab = "varanalysis", label = "Variable Analysis", icon = "sliders-h"),
-  list(tab = "correlation", label = "Correlation Matrix", icon = "th"),
   list(tab = "catsuite", label = "Categorical Suite", icon = "layer-group"),
   list(tab = "tests", label = "Hypothesis Tests", icon = "calculator"),
   list(tab = "slr", label = "Simple Linear Regression", icon = "chart-line"),
@@ -64,7 +62,7 @@ app_sections <- list(
 )
 
 grouped_sections <- list(
-  data_analysis = c("upload", "preview", "varanalysis", "correlation", "catsuite", "tests"),
+  data_analysis = c("upload", "preview", "varanalysis", "catsuite", "tests"),
   linear_reg = c("slr", "mlr", "polyreg"),
   correcting_models = c("boxtrans", "wls")
 )
@@ -245,9 +243,10 @@ ui <- dashboardPage(
         });
 
         document.addEventListener('DOMContentLoaded', function() {
+          document.body.classList.add('dark-mode-pro');
           var darkToggle = document.getElementById('darkModeToggle');
-          if (darkToggle && darkToggle.checked) {
-            document.body.classList.add('dark-mode-pro');
+          if (darkToggle) {
+            darkToggle.checked = true;
           }
 
           var activeProxy = document.querySelector('.detox-tab-proxy li.active a[data-value]');
@@ -256,9 +255,19 @@ ui <- dashboardPage(
           var toggle = document.querySelector('.js-detox-menu-toggle');
           if (toggle) {
             toggle.addEventListener('click', function() {
-              document.body.classList.toggle('detox-mobile-open');
+              if (window.matchMedia('(max-width: 992px)').matches) {
+                document.body.classList.toggle('detox-mobile-open');
+              } else {
+                document.body.classList.toggle('detox-nav-collapsed');
+              }
             });
           }
+
+          window.addEventListener('resize', function() {
+            if (!window.matchMedia('(max-width: 992px)').matches) {
+              document.body.classList.remove('detox-mobile-open');
+            }
+          });
 
           var backdrop = document.querySelector('.js-detox-backdrop');
           if (backdrop) {
@@ -270,14 +279,14 @@ ui <- dashboardPage(
       ")),
       tags$style(HTML("
         :root {
-          --bg: #f5f7fb;
-          --surface: #ffffff;
-          --surface-soft: #f8fafc;
-          --ink: #111827;
-          --muted: #6b7280;
-          --primary: #2563eb;
-          --primary-dark: #1e40af;
-          --border: #e5e7eb;
+          --bg: #020617;
+          --surface: #0f172a;
+          --surface-soft: #111c30;
+          --ink: #e5e7eb;
+          --muted: #94a3b8;
+          --primary: #38bdf8;
+          --primary-dark: #2563eb;
+          --border: #26364d;
           --radius: 14px;
         }
         body, h1, h2, h3, h4, h5, h6, .content, .main-header .logo, .main-header .navbar, .sidebar-menu > li > a {
@@ -285,7 +294,7 @@ ui <- dashboardPage(
           color: var(--ink);
         }
         .content-wrapper, .right-side {
-          background: radial-gradient(circle at 10% 0%, #e9f2ff 0%, #f5f7fb 35%, #f5f7fb 100%);
+          background: radial-gradient(circle at 12% 0%, #10233d 0%, #07111f 34%, #020617 100%);
         }
         .content { padding: 18px; }
         .main-header .logo {
@@ -325,12 +334,13 @@ ui <- dashboardPage(
           border: 1px solid var(--border);
           border-top: 0 !important;
           border-radius: var(--radius);
-          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+          color: var(--ink);
+          box-shadow: 0 18px 38px rgba(2, 6, 23, 0.34);
           overflow: visible;
         }
         .box-header {
           border-bottom: 1px solid var(--border);
-          background: linear-gradient(180deg, #ffffff, #f8fbff);
+          background: linear-gradient(180deg, #111c30, #0f172a);
         }
         .box.box-primary .box-header { border-left: 5px solid #2563eb; }
         .box.box-info .box-header { border-left: 5px solid #0891b2; }
@@ -339,9 +349,9 @@ ui <- dashboardPage(
         .box.box-danger .box-header { border-left: 5px solid #dc2626; }
         .small-box, .info-box {
           border-radius: 12px;
-          box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+          box-shadow: 0 14px 28px rgba(2, 6, 23, 0.28);
         }
-        h2 { color: #1d4ed8; font-weight: 700; letter-spacing: -.02em; }
+        h2 { color: #93c5fd; font-weight: 700; letter-spacing: -.02em; }
         .btn-analyze {
           background: linear-gradient(135deg, #0ea5e9, #2563eb);
           color: white;
@@ -355,22 +365,23 @@ ui <- dashboardPage(
         .btn-analyze:hover { opacity: .95; color: #fff; }
         .form-control, .selectize-input {
           border-radius: 10px !important;
-          border: 1px solid #d1d5db !important;
+          border: 1px solid #334155 !important;
           min-height: 44px;
-          background: #fff;
+          background: #111827;
+          color: #e5e7eb;
           box-shadow: none;
         }
         .selectize-dropdown {
           z-index: 10050 !important;
         }
         .selectize-input { font-size: 14px; padding-top: 10px; padding-bottom: 10px; }
-        .control-label { font-weight: 600; color: #111827; }
+        .control-label { font-weight: 600; color: #e5e7eb; }
         .tab-content { padding-top: 10px; }
         .nav-tabs-custom { border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(15,23,42,.06); }
         .nav-tabs-custom > .nav-tabs > li.active {
           border-top-color: #2563eb;
         }
-        .nav-tabs-custom > .nav-tabs > li > a { color: #374151; font-weight: 600; }
+        .nav-tabs-custom > .nav-tabs > li > a { color: #cbd5e1; font-weight: 600; }
         .help-block, .hint-text { color: var(--muted) !important; }
         .quick-actions .btn {
           border-radius: 10px;
@@ -419,6 +430,90 @@ ui <- dashboardPage(
         body.dark-mode-pro .selectize-input {
           background: #111827 !important;
           color: #e5e7eb !important;
+          border-color: #334155 !important;
+        }
+        body.dark-mode-pro input,
+        body.dark-mode-pro textarea,
+        body.dark-mode-pro select,
+        body.dark-mode-pro .input-group-addon,
+        body.dark-mode-pro .selectize-control.single .selectize-input,
+        body.dark-mode-pro .selectize-control.multi .selectize-input,
+        body.dark-mode-pro .selectize-control.multi .selectize-input > div {
+          background: #111827 !important;
+          color: #e5e7eb !important;
+          border-color: #334155 !important;
+        }
+        body.dark-mode-pro .box-title,
+        body.dark-mode-pro .box-body,
+        body.dark-mode-pro .box-footer,
+        body.dark-mode-pro label,
+        body.dark-mode-pro .checkbox label,
+        body.dark-mode-pro .radio label,
+        body.dark-mode-pro .shiny-input-container,
+        body.dark-mode-pro .well,
+        body.dark-mode-pro .modal-content,
+        body.dark-mode-pro .dropdown-menu {
+          color: #e5e7eb !important;
+        }
+        body.dark-mode-pro .well,
+        body.dark-mode-pro .modal-content,
+        body.dark-mode-pro .dropdown-menu {
+          background: #0f172a !important;
+          border-color: #334155 !important;
+        }
+        body.dark-mode-pro .btn-default,
+        body.dark-mode-pro .btn-file,
+        body.dark-mode-pro .fileinput-button {
+          background: #1e293b !important;
+          color: #e5e7eb !important;
+          border-color: #475569 !important;
+        }
+        body.dark-mode-pro .btn-primary,
+        body.dark-mode-pro .btn-info {
+          background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+          border-color: transparent !important;
+          color: #ffffff !important;
+        }
+        body.dark-mode-pro .btn-success {
+          background: linear-gradient(135deg, #059669, #047857) !important;
+          border-color: transparent !important;
+          color: #ffffff !important;
+        }
+        body.dark-mode-pro .btn-warning {
+          background: linear-gradient(135deg, #d97706, #b45309) !important;
+          border-color: transparent !important;
+          color: #ffffff !important;
+        }
+        body.dark-mode-pro table,
+        body.dark-mode-pro .table,
+        body.dark-mode-pro .table-striped > tbody > tr:nth-of-type(odd) {
+          background: transparent !important;
+          color: #e5e7eb !important;
+        }
+        body.dark-mode-pro .table > thead > tr > th,
+        body.dark-mode-pro .table > tbody > tr > th,
+        body.dark-mode-pro .table > tfoot > tr > th,
+        body.dark-mode-pro .table > thead > tr > td,
+        body.dark-mode-pro .table > tbody > tr > td,
+        body.dark-mode-pro .table > tfoot > tr > td {
+          border-color: #243244 !important;
+        }
+        body.dark-mode-pro .nav-tabs,
+        body.dark-mode-pro .nav-tabs-custom > .nav-tabs {
+          background: #0b1220 !important;
+          border-color: #334155 !important;
+        }
+        body.dark-mode-pro .nav-tabs > li > a,
+        body.dark-mode-pro .nav-tabs-custom > .nav-tabs > li > a {
+          color: #cbd5e1 !important;
+          background: transparent !important;
+          border-color: transparent !important;
+        }
+        body.dark-mode-pro .nav-tabs > li.active > a,
+        body.dark-mode-pro .nav-tabs > li.active > a:hover,
+        body.dark-mode-pro .nav-tabs > li.active > a:focus {
+          background: #111c30 !important;
+          color: #f8fafc !important;
           border-color: #334155 !important;
         }
         body.dark-mode-pro pre {
@@ -496,6 +591,128 @@ ui <- dashboardPage(
           background:#e3f2fd; border-left:4px solid #1976d2;
           border-radius:5px; padding:10px 14px; margin-bottom:12px;
           font-size:13px; color:#0d47a1;
+        }
+        .va-summary {
+          display:flex;
+          flex-direction:column;
+          gap:12px;
+        }
+        .va-metric-grid {
+          display:grid;
+          grid-template-columns:repeat(2, minmax(120px, 1fr));
+          gap:10px;
+        }
+        .va-metric-card {
+          border:1px solid #334155;
+          border-radius:10px;
+          padding:12px;
+          background:#111827;
+        }
+        .va-metric-card span {
+          display:block;
+          color:#94a3b8;
+          font-size:11px;
+          font-weight:800;
+          text-transform:uppercase;
+        }
+        .va-metric-card strong {
+          display:block;
+          margin-top:5px;
+          color:#f8fafc;
+          font-size:20px;
+          line-height:1.15;
+          word-break:break-word;
+        }
+        .va-metric-card small {
+          display:block;
+          margin-top:5px;
+          color:#94a3b8;
+          line-height:1.35;
+        }
+        .va-status-ok { border-left:4px solid #22c55e; }
+        .va-status-warn { border-left:4px solid #f59e0b; }
+        .va-status-bad { border-left:4px solid #ef4444; }
+        .va-status-neutral { border-left:4px solid #38bdf8; }
+        .va-interpretation {
+          border:1px solid #334155;
+          border-radius:10px;
+          padding:12px 14px;
+          background:#0f1b31;
+          color:#dbeafe;
+          line-height:1.45;
+        }
+        .va-interpretation h5 {
+          margin:0 0 6px;
+          font-weight:800;
+          color:#f8fafc;
+        }
+        .va-pill-row {
+          display:flex;
+          flex-wrap:wrap;
+          gap:8px;
+          margin-bottom:2px;
+        }
+        .va-pill {
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          border-radius:999px;
+          padding:6px 10px;
+          font-size:12px;
+          font-weight:800;
+          border:1px solid #334155;
+          background:#111827;
+          color:#e5e7eb;
+        }
+        .va-pill.ok { border-color:#166534; color:#bbf7d0; background:#052e1d; }
+        .va-pill.warn { border-color:#92400e; color:#fde68a; background:#27180f; }
+        .va-pill.bad { border-color:#991b1b; color:#fecaca; background:#3b0a12; }
+        .va-pill.neutral { border-color:#1d4ed8; color:#bfdbfe; background:#0f1b31; }
+        .va-detail {
+          border:1px solid #334155;
+          border-radius:10px;
+          padding:10px 12px;
+          background:#0b1220;
+        }
+        .va-detail summary {
+          cursor:pointer;
+          color:#bfdbfe;
+          font-weight:800;
+        }
+        .va-detail pre {
+          margin-top:10px;
+          max-height:260px;
+          overflow:auto;
+          white-space:pre-wrap;
+        }
+        .va-table {
+          width:100%;
+          border-collapse:collapse;
+          font-size:13px;
+        }
+        .va-table th,
+        .va-table td {
+          border-bottom:1px solid #243244;
+          padding:8px 6px;
+          vertical-align:top;
+        }
+        .va-table th {
+          color:#bfdbfe;
+          font-weight:800;
+        }
+        .va-empty {
+          border:1px dashed #475569;
+          border-radius:10px;
+          padding:14px;
+          color:#cbd5e1;
+          background:#0b1220;
+        }
+        .va-visual-card .box-body {
+          padding:18px;
+        }
+        .va-visual-card .shiny-plot-output,
+        .va-visual-card .plotly {
+          min-height:540px;
         }
         .mb-rule-row {
           display:flex;
@@ -616,6 +833,44 @@ ui <- dashboardPage(
         body.dark-mode-pro .mb-metric strong {
           color:#e5e7eb;
         }
+        body.dark-mode-pro .mb-pill {
+          background:#27180f;
+          color:#fdba74;
+          border-color:#7c2d12;
+        }
+        body.dark-mode-pro .mb-step-num,
+        body.dark-mode-pro .mb-equation {
+          background:#0f1b31;
+          color:#93c5fd;
+          border-color:#1d4ed8;
+        }
+        body.dark-mode-pro .mb-action-add {
+          background:#052e1d;
+          color:#86efac;
+        }
+        body.dark-mode-pro .mb-action-remove {
+          background:#3b0a12;
+          color:#fda4af;
+        }
+        body.dark-mode-pro .mb-action-stop {
+          background:#1f2937;
+          color:#cbd5e1;
+        }
+        body.dark-mode-pro .mb-final-chip {
+          background:#052e1d;
+          border-color:#166534;
+          color:#bbf7d0;
+        }
+        body.dark-mode-pro .mb-step-p,
+        body.dark-mode-pro .mb-metric span,
+        body.dark-mode-pro .hint-text {
+          color:#94a3b8 !important;
+        }
+        body.dark-mode-pro .reg-help-alert {
+          background:#0f1b31;
+          border-left-color:#38bdf8;
+          color:#bfdbfe;
+        }
 
         .wrapper,
         .content-wrapper,
@@ -633,7 +888,7 @@ ui <- dashboardPage(
           margin-left: 0 !important;
         }
         .wrapper {
-          background: linear-gradient(180deg, #dfe9f8 0%, #eef4fb 18%, #eef3f9 18.1%, #eef3f9 100%);
+          background: linear-gradient(180deg, #030712 0%, #07111f 18%, #020617 18.1%, #020617 100%);
         }
         .content {
           padding: 0 0 24px 0;
@@ -656,7 +911,7 @@ ui <- dashboardPage(
           position: relative;
           z-index: 999;
           padding: 24px 28px 18px;
-          color: #0f172a;
+          color: #f8fafc;
         }
         .detox-header-inner {
           display: flex;
@@ -676,12 +931,12 @@ ui <- dashboardPage(
           font-weight: 700;
           line-height: 1.1;
           margin: 0;
-          color: #0f172a;
+          color: #f8fafc;
           text-shadow: none;
         }
         .detox-brand-copy p {
           margin: 6px 0 0;
-          color: #475569;
+          color: #cbd5e1;
           font-size: 14px;
           max-width: 680px;
           text-shadow: none;
@@ -698,35 +953,39 @@ ui <- dashboardPage(
           gap: 8px;
           padding: 10px 14px;
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.92);
-          border: 1px solid #dbe4f0;
-          color: #334155;
+          background: rgba(15, 23, 42, 0.92);
+          border: 1px solid #334155;
+          color: #f8fafc;
           font-weight: 600;
-          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+          box-shadow: 0 8px 20px rgba(2, 6, 23, 0.28);
         }
         .detox-chip strong {
-          color: #ffb07c;
+          color: #fdba74;
           font-weight: 700;
         }
         .detox-chip.current-module {
-          background: rgba(255, 255, 255, 0.96);
-          border-color: #d7e0ec;
+          background: rgba(15, 23, 42, 0.96);
+          border-color: #475569;
         }
         .upload-note {
-          color: #1f2937;
+          color: #e5e7eb;
+          border: 1px solid #334155;
         }
         .upload-note strong {
           color: inherit;
         }
         .detox-menu-toggle {
-          display: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           width: 48px;
           height: 48px;
           border: 0;
           border-radius: 14px;
-          background: rgba(255, 255, 255, 0.12);
-          color: #fff;
+          background: #1e293b;
+          color: #f8fafc;
           font-size: 20px;
+          box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
         }
         .detox-layout {
           display: grid;
@@ -734,15 +993,19 @@ ui <- dashboardPage(
           gap: 24px;
           padding: 0 28px 28px;
           align-items: start;
+          transition: grid-template-columns .22s ease;
         }
         .detox-sidebar-panel {
           position: sticky;
           top: 24px;
-          background: linear-gradient(180deg, #0d1b2f 0%, #102540 100%);
+          background: linear-gradient(180deg, #07111f 0%, #0d1b2f 100%);
           border-radius: 26px;
           padding: 22px 18px;
-          box-shadow: 0 20px 45px rgba(4, 13, 27, 0.2);
+          border: 1px solid #1f3148;
+          box-shadow: 0 20px 45px rgba(2, 6, 23, 0.38);
           color: #fff;
+          overflow: hidden;
+          transition: padding .22s ease, border-radius .22s ease;
         }
         .detox-sidebar-panel h4 {
           color: #fff;
@@ -777,6 +1040,11 @@ ui <- dashboardPage(
           transition: all .2s ease;
           font-weight: 600;
         }
+        .detox-nav-link .fa,
+        .detox-nav-link .fas {
+          flex: 0 0 18px;
+          text-align: center;
+        }
         .detox-nav-link:hover,
         .detox-nav-link:focus {
           color: #fff;
@@ -793,13 +1061,36 @@ ui <- dashboardPage(
         .detox-main {
           min-width: 0;
         }
+        body.detox-nav-collapsed .detox-layout {
+          grid-template-columns: 88px minmax(0, 1fr);
+        }
+        body.detox-nav-collapsed .detox-sidebar-panel {
+          padding: 18px 12px;
+        }
+        body.detox-nav-collapsed .detox-sidebar-panel h4,
+        body.detox-nav-collapsed .detox-sidebar-panel p,
+        body.detox-nav-collapsed .detox-nav-link span {
+          display: none;
+        }
+        body.detox-nav-collapsed .detox-nav-list {
+          gap: 8px;
+        }
+        body.detox-nav-collapsed .detox-nav-link {
+          justify-content: center;
+          padding: 14px 0;
+          border-radius: 18px;
+        }
+        body.detox-nav-collapsed .detox-nav-link:hover,
+        body.detox-nav-collapsed .detox-nav-link:focus {
+          transform: none;
+        }
         .detox-content-card {
-          background: rgba(255, 255, 255, 0.68);
+          background: rgba(15, 23, 42, 0.82);
           backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.7);
+          border: 1px solid rgba(51, 65, 85, 0.9);
           border-radius: 28px;
           padding: 22px;
-          box-shadow: 0 20px 40px rgba(30, 41, 59, 0.08);
+          box-shadow: 0 22px 45px rgba(2, 6, 23, 0.34);
         }
         .detox-content-intro {
           display: flex;
@@ -811,37 +1102,37 @@ ui <- dashboardPage(
         }
         .detox-content-intro h2 {
           margin: 0;
-          color: #0f172a;
+          color: #f8fafc;
           font-family: 'Poppins', 'Plus Jakarta Sans', sans-serif;
           font-size: 30px;
           font-weight: 700;
         }
         .detox-content-intro p {
           margin: 8px 0 0;
-          color: #64748b;
+          color: #cbd5e1;
           max-width: 680px;
         }
         .detox-note {
           padding: 10px 14px;
           border-radius: 16px;
-          background: #fff7ed;
-          color: #9a3412;
+          background: #27180f;
+          color: #fdba74;
           font-weight: 700;
-          border: 1px solid #fed7aa;
+          border: 1px solid #7c2d12;
         }
         .detox-subnav-wrap {
           margin-bottom: 18px;
           padding: 16px 18px;
           border-radius: 22px;
-          background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
-          border: 1px solid #dbe8f6;
+          background: linear-gradient(180deg, #0f1b31 0%, #0b1629 100%);
+          border: 1px solid #23344b;
         }
         .detox-subnav-title {
           font-size: 13px;
           font-weight: 800;
           text-transform: uppercase;
           letter-spacing: .08em;
-          color: #47607c;
+          color: #93c5fd;
           margin-bottom: 12px;
         }
         .detox-subnav-list {
@@ -855,25 +1146,26 @@ ui <- dashboardPage(
           gap: 9px;
           padding: 11px 16px;
           border-radius: 999px;
-          background: #ffffff;
-          border: 1px solid #d6e2f0;
-          color: #334155;
+          background: #111c30;
+          border: 1px solid #2c415f;
+          color: #dbeafe;
           font-weight: 700;
-          box-shadow: 0 8px 20px rgba(148, 163, 184, 0.12);
+          box-shadow: none;
           transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
         }
         .detox-subnav-link:hover,
         .detox-subnav-link:focus {
           text-decoration: none;
-          color: #0f172a;
+          color: #ffffff;
           transform: translateY(-1px);
-          box-shadow: 0 10px 22px rgba(148, 163, 184, 0.18);
+          background: #16233b;
+          box-shadow: none;
         }
         .detox-subnav-link.is-active {
-          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+          background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
           border-color: transparent;
           color: #ffffff;
-          box-shadow: 0 12px 24px rgba(37, 99, 235, 0.28);
+          box-shadow: 0 12px 24px rgba(14, 165, 233, 0.22);
         }
         .tab-content > .tab-pane {
           margin-top: 0;
@@ -884,10 +1176,30 @@ ui <- dashboardPage(
         .quick-actions .box-body {
           padding-bottom: 6px;
         }
+        .preview-page .box {
+          overflow: hidden;
+        }
+        .preview-table-card .box-body {
+          padding: 18px;
+        }
+        .preview-table-card .dataTables_wrapper {
+          min-height: 560px;
+        }
+        .preview-summary-card .box-body {
+          min-height: 320px;
+          padding: 16px;
+        }
+        .preview-summary-card h5 {
+          margin-top: 0;
+          margin-bottom: 12px;
+          font-weight: 700;
+          color: #e5e7eb;
+        }
         .dataTables_wrapper .dataTables_filter input,
         .dataTables_wrapper .dataTables_length select {
-          color: #111827 !important;
-          background: #ffffff !important;
+          color: #e5e7eb !important;
+          background: #111827 !important;
+          border-color: #334155 !important;
         }
         .dataTables_wrapper table.dataTable thead th,
         .dataTables_wrapper table.dataTable tbody td,
@@ -897,7 +1209,7 @@ ui <- dashboardPage(
         .dataTables_wrapper .dataTables_length,
         .dataTables_wrapper .dataTables_filter label,
         .dataTables_wrapper .dataTables_length label {
-          color: #1f2937 !important;
+          color: #e5e7eb !important;
         }
         body.dark-mode-pro .wrapper {
           background: linear-gradient(180deg, #030712 0%, #07111f 18%, #020617 18.1%, #020617 100%);
@@ -956,6 +1268,11 @@ ui <- dashboardPage(
         }
         body.dark-mode-pro .detox-chip.current-module strong {
           color: #fdba74 !important;
+        }
+        body.dark-mode-pro .detox-menu-toggle {
+          background: #1e293b;
+          color: #f8fafc;
+          box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
         }
         body.dark-mode-pro .upload-note {
           color: #e5e7eb !important;
@@ -1022,14 +1339,12 @@ ui <- dashboardPage(
           }
         }
         @media (max-width: 992px) {
-          .detox-menu-toggle {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-          }
           .detox-layout {
             grid-template-columns: 1fr;
             padding: 0 16px 20px;
+          }
+          body.detox-nav-collapsed .detox-layout {
+            grid-template-columns: 1fr;
           }
           .detox-sidebar-panel {
             position: fixed;
@@ -1071,6 +1386,8 @@ ui <- dashboardPage(
             tags$button(
               class = "detox-menu-toggle js-detox-menu-toggle",
               type = "button",
+              title = "Toggle navigation",
+              `aria-label` = "Toggle navigation",
               icon("bars")
             ),
             div(
@@ -1098,7 +1415,7 @@ ui <- dashboardPage(
           div(
             class = "detox-content-card",
             conditionalPanel(
-              condition = "['upload','preview','varanalysis','correlation','catsuite','tests'].includes(input.tabs)",
+              condition = "['upload','preview','varanalysis','catsuite','tests'].includes(input.tabs)",
               build_subpage_nav(
                 "Data & Analysis",
                 Filter(function(x) x$tab %in% grouped_sections$data_analysis, app_sections)
@@ -1120,38 +1437,6 @@ ui <- dashboardPage(
             ),
     conditionalPanel(
       condition = "input.tabs == 'upload' || input.tabs == 'preview'",
-      fluidRow(
-        box(
-          width = 12, status = "primary", solidHeader = FALSE, class = "quick-actions",
-          fluidRow(
-            column(
-              6,
-              tags$div(
-                style = "display:flex; gap:8px; flex-wrap:wrap;",
-                actionButton("qaSample", "Sample Data", icon = icon("database"), class = "btn btn-primary"),
-                actionButton("qaReset", "Reset Data", icon = icon("undo"), class = "btn btn-default"),
-                actionButton("presetPriceMileage", "Preset: Price vs Mileage", icon = icon("bolt"), class = "btn btn-info"),
-                actionButton("presetBrandCompare", "Preset: Brand Comparison", icon = icon("tags"), class = "btn btn-info"),
-                downloadButton("downloadReport", "Download Report", class = "btn btn-success")
-              )
-            ),
-            column(
-              3,
-              uiOutput("globalVarSearchUI")
-            ),
-            column(
-              3,
-              tags$div(
-                style = "display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;",
-                checkboxInput("interactivePlots", "Interactive", value = HAS_PLOTLY),
-                checkboxInput("darkModeToggle", "Dark mode", TRUE),
-                downloadButton("downloadState", "Save Session", class = "btn btn-success"),
-                fileInput("loadState", NULL, accept = ".rds", buttonLabel = "Load Session", placeholder = "No file")
-              )
-            )
-          )
-        )
-      ),
       fluidRow(
         class = "kpi-row",
         infoBoxOutput("kpiRows", width = 3),
@@ -1189,26 +1474,11 @@ ui <- dashboardPage(
                 )
               )
             ),
-            hr(),
-            h4("Instructions:"),
-            tags$ul(
-              tags$li("Upload any CSV or Excel file with your data (maximum 50 MB)"),
-              tags$li("The app will automatically detect numerical and categorical variables"),
-              tags$li("Preview your data in the 'Data Preview' tab"),
-              tags$li("Select variables for analysis in each tab"),
-              tags$li("Click 'Analyze Data' to confirm your upload")
-            ),
             tags$div(
               class = "upload-note upload-note-success",
               style = "background-color: #dff0d8; padding: 10px; border-radius: 5px; margin-top: 10px;",
-              tags$strong(icon("check-circle"), " Default Dataset Loaded:"),
-              " The app starts with P2_DeliveryTime.xlsx, so you can analyze immediately without uploading."
-            ),
-            tags$div(
-              class = "upload-note upload-note-info",
-              style = "background-color: #d9edf7; padding: 10px; border-radius: 5px; margin-top: 10px;",
-              tags$strong(icon("info-circle"), " File Size Limit:"),
-              " Maximum upload size is 50 MB. For larger datasets, consider filtering or sampling your data before upload."
+              tags$strong(icon("check-circle"), " Ready to analyze:"),
+              " Use the default P2_DeliveryTime.xlsx dataset or upload a CSV/Excel file, then click Analyze Data."
             ),
             hr(),
             h4("Variable Detection:"),
@@ -1268,37 +1538,42 @@ ui <- dashboardPage(
             ),
             tags$p(class = "hint-text", "Tip: log transform applies log1p(x) to selected numeric variables.")
           )
-        ),
-        fluidRow(
-          infoBoxOutput("rowCountBox", width = 4),
-          infoBoxOutput("colCountBox", width = 4),
-          infoBoxOutput("statusBox", width = 4)
         )
       ),
 
       # Data Preview Tab
       tabItem(
         tabName = "preview",
-        fluidRow(
-          box(
-            title = "Data Preview",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            spn(DTOutput("dataPreview")),
-            hr(),
-            h4("Data Summary"),
-            fluidRow(
-              column(
-                7,
-                h5("Numeric Variables"),
-                spn(DT::DTOutput("dataSummaryNumeric"))
-              ),
-              column(
-                5,
-                h5("Categorical Variables"),
-                spn(DT::DTOutput("dataSummaryCategorical"))
-              )
+        tags$div(
+          class = "preview-page",
+          fluidRow(
+            box(
+              title = tagList(icon("table"), " Data Preview"),
+              status = "primary",
+              solidHeader = TRUE,
+              width = 12,
+              class = "preview-table-card",
+              spn(DTOutput("dataPreview"))
+            )
+          ),
+          fluidRow(
+            box(
+              title = tagList(icon("calculator"), " Numeric Summary"),
+              status = "info",
+              solidHeader = TRUE,
+              width = 8,
+              class = "preview-summary-card",
+              h5("Numeric Variables"),
+              spn(DT::DTOutput("dataSummaryNumeric"))
+            ),
+            box(
+              title = tagList(icon("tags"), " Categorical Summary"),
+              status = "success",
+              solidHeader = TRUE,
+              width = 4,
+              class = "preview-summary-card",
+              h5("Categorical Variables"),
+              spn(DT::DTOutput("dataSummaryCategorical"))
             )
           )
         )
@@ -1377,101 +1652,31 @@ ui <- dashboardPage(
               title = "Descriptive Statistics",
               status = "info",
               solidHeader = TRUE,
-              width = 6,
-              verbatimTextOutput("singleStats")
-            ),
+              width = 12,
+              uiOutput("singleStats")
+            )
+          ),
+          fluidRow(
             box(
               title = "Visualization",
               status = "info",
               solidHeader = TRUE,
-              width = 6,
+              width = 12,
+              class = "va-visual-card",
               conditionalPanel(
                 condition = "input.interactivePlots",
-                spn(plotly_output_safe("singlePlotly", height = "400px"))
+                spn(plotly_output_safe("singlePlotly", height = "560px"))
               ),
               conditionalPanel(
                 condition = "!input.interactivePlots",
-                spn(plotOutput("singlePlot", height = "400px"))
+                spn(plotOutput("singlePlot", height = "560px"))
               )
             )
           )
         ),
         conditionalPanel(
           condition = "input.analysisMode == 'multi'",
-          fluidRow(
-            box(
-              title = "Analysis Results",
-              status = "success",
-              solidHeader = TRUE,
-              width = 6,
-              verbatimTextOutput("twoVarStats")
-            ),
-            box(
-              title = "Visualization",
-              status = "success",
-              solidHeader = TRUE,
-              width = 6,
-              conditionalPanel(
-                condition = "input.interactivePlots",
-                spn(plotly_output_safe("twoVarPlotly", height = "400px"))
-              ),
-              conditionalPanel(
-                condition = "!input.interactivePlots",
-                spn(plotOutput("twoVarPlot", height = "400px"))
-              )
-            )
-          )
-        )
-      ),
-
-      # Correlation Matrix
-      tabItem(
-        tabName = "correlation",
-        fluidRow(
-          box(
-            title = "Correlation Matrix Analysis",
-            status = "warning",
-            solidHeader = TRUE,
-            width = 12,
-            fluidRow(
-              column(
-                8,
-                uiOutput("corrVarsSelect")
-              ),
-              column(
-                4,
-                br(),
-                actionButton("runCorrAnalysis", "Calculate Correlation",
-                  class = "btn btn-primary"
-                )
-              )
-            )
-          )
-        ),
-        fluidRow(
-          box(
-            title = "Correlation Matrix",
-            status = "warning",
-            solidHeader = TRUE,
-            width = 6,
-            verbatimTextOutput("corrMatrix")
-          ),
-          box(
-            title = "Correlation Heatmap",
-            status = "warning",
-            solidHeader = TRUE,
-            width = 6,
-            spn(plotOutput("corrHeatmap", height = "400px"))
-          )
-        ),
-        fluidRow(
-          box(
-            title = "Scatter Plot Matrix",
-            status = "warning",
-            solidHeader = TRUE,
-            width = 12,
-            spn(plotOutput("corrPairs", height = "500px"))
-          )
+          uiOutput("multiAnalysisOutputUI")
         )
       ),
 
@@ -1504,7 +1709,7 @@ ui <- dashboardPage(
           fluidRow(
             box(
               title = "Categorical Variable Analysis",
-              status = "danger",
+              status = "info",
               solidHeader = TRUE,
               width = 12,
               fluidRow(
@@ -1512,7 +1717,7 @@ ui <- dashboardPage(
                 column(
                   4,
                   selectInput("catPlotType", "Plot Type:",
-                    choices = c("Bar Plot", "Pie Chart", "Both")
+                    choices = c("Frequency Bar", "Share Bar")
                   )
                 ),
                 column(
@@ -1526,27 +1731,27 @@ ui <- dashboardPage(
           fluidRow(
             box(
               title = "Frequency Distribution",
-              status = "danger",
+              status = "info",
               solidHeader = TRUE,
-              width = 6,
-              h5("Frequency Table:"),
-              tableOutput("catFrequency"),
-              hr(),
-              h5("Proportion Table:"),
-              tableOutput("catProportion")
-            ),
+              width = 12,
+              uiOutput("catFrequency"),
+              uiOutput("catProportion")
+            )
+          ),
+          fluidRow(
             box(
               title = "Visualization",
-              status = "danger",
+              status = "info",
               solidHeader = TRUE,
-              width = 6,
+              width = 12,
+              class = "va-visual-card",
               conditionalPanel(
                 condition = "input.interactivePlots",
-                spn(plotly_output_safe("catPlotly", height = "450px"))
+                spn(plotly_output_safe("catPlotly", height = "560px"))
               ),
               conditionalPanel(
                 condition = "!input.interactivePlots",
-                spn(plotOutput("catPlot", height = "450px"))
+                spn(plotOutput("catPlot", height = "560px"))
               )
             )
           )
@@ -1575,15 +1780,8 @@ ui <- dashboardPage(
               title = "Contingency Table",
               status = "primary",
               solidHeader = TRUE,
-              width = 6,
-              tableOutput("crosstabTable")
-            ),
-            box(
-              title = "Joint Proportions",
-              status = "primary",
-              solidHeader = TRUE,
-              width = 6,
-              tableOutput("crosstabProp")
+              width = 12,
+              uiOutput("crosstabTable")
             )
           ),
           fluidRow(
@@ -1591,19 +1789,31 @@ ui <- dashboardPage(
               title = "Chi-Square Test",
               status = "primary",
               solidHeader = TRUE,
-              width = 6,
-              verbatimTextOutput("chiSquareTest")
-            ),
+              width = 12,
+              uiOutput("chiSquareTest")
+            )
+          ),
+          fluidRow(
+            box(
+              title = "Joint Proportions",
+              status = "primary",
+              solidHeader = TRUE,
+              width = 12,
+              uiOutput("crosstabProp")
+            )
+          ),
+          fluidRow(
             box(
               title = "Visualization",
               status = "primary",
               solidHeader = TRUE,
-              width = 6,
+              width = 12,
+              class = "va-visual-card",
               selectInput("crosstabPlotType", "Plot Type:",
-                choices = c("Stacked Bar", "Grouped Bar", "Mosaic Plot")
+                choices = c("Count Heatmap", "Stacked Share Bar", "Grouped Count Bar")
               ),
-              spn(plotOutput("crosstabPlot", height = "350px"))
-            )
+              spn(plotOutput("crosstabPlot", height = "600px"))
+            ),
           )
         ),
         conditionalPanel(
@@ -1641,10 +1851,10 @@ ui <- dashboardPage(
               width = 12,
               collapsible = TRUE,
               h4("Frequency Table"),
-              verbatimTextOutput("multiCatTable"),
+              uiOutput("multiCatTable"),
               hr(),
               h4("Conditional Proportions"),
-              verbatimTextOutput("multiCatProportions")
+              uiOutput("multiCatProportions")
             )
           ),
           fluidRow(
@@ -1653,14 +1863,14 @@ ui <- dashboardPage(
               status = "success",
               solidHeader = TRUE,
               width = 6,
-              verbatimTextOutput("multiCatChiSquare")
+              uiOutput("multiCatChiSquare")
             ),
             box(
               title = tagList(icon("info-circle"), " Association Measures"),
               status = "success",
               solidHeader = TRUE,
               width = 6,
-              verbatimTextOutput("multiCatAssociation")
+              uiOutput("multiCatAssociation")
             )
           ),
           fluidRow(
@@ -1669,21 +1879,22 @@ ui <- dashboardPage(
               status = "primary",
               solidHeader = TRUE,
               width = 12,
+              class = "va-visual-card",
               fluidRow(
                 column(
                   4,
                   selectInput("multiCatPlotType", "Visualization Type:",
                     choices = c(
-                      "Grouped Bar Chart",
-                      "Faceted Bar Chart",
-                      "Mosaic Plot",
-                      "Heatmap"
+                      "Heatmap",
+                      "Faceted Heatmap",
+                      "Stacked Share Bar",
+                      "Grouped Count Bar"
                     )
                   )
                 ),
                 column(8, uiOutput("multiCatPlotOptions"))
               ),
-              spn(plotOutput("multiCatPlot", height = "500px"))
+              spn(plotOutput("multiCatPlot", height = "620px"))
             )
           ),
           fluidRow(
@@ -1692,7 +1903,7 @@ ui <- dashboardPage(
               status = "info",
               solidHeader = TRUE,
               width = 12,
-              htmlOutput("multiCatInsights")
+              uiOutput("multiCatInsights")
             )
           )
         )
@@ -1730,15 +1941,18 @@ ui <- dashboardPage(
             title = "Test Results",
             status = "success",
             solidHeader = TRUE,
-            width = 8,
-            verbatimTextOutput("testResults")
-          ),
+            width = 12,
+            uiOutput("testResults")
+          )
+        ),
+        fluidRow(
           box(
             title = "Visualization",
             status = "success",
             solidHeader = TRUE,
-            width = 4,
-            plotOutput("testPlot", height = "300px")
+            width = 12,
+            class = "va-visual-card",
+            plotOutput("testPlot", height = "560px")
           )
         )
       ),
@@ -1955,7 +2169,7 @@ ui <- dashboardPage(
                   icon("info-circle"),
                   " Shows fitted coefficients, standard errors, t-statistics, p-values, R², and adjusted R²."
                 ),
-                verbatimTextOutput("slrSummary")
+                uiOutput("slrSummary")
               ),
               tabPanel(
                 tagList(icon("calculator"), " ANOVA Table"),
@@ -1963,9 +2177,9 @@ ui <- dashboardPage(
                 tags$div(
                   class = "reg-help-alert",
                   icon("info-circle"),
-                  " Tests overall model significance (F-test). A small p-value means the model explains\n                  a significant portion of the variation in Y."
+                  " Tests overall model significance (F-test). A small p-value means the model explains a significant portion of the variation in Y."
                 ),
-                verbatimTextOutput("slrAnova")
+                uiOutput("slrAnova")
               ),
               tabPanel(
                 tagList(icon("arrows-alt-h"), " Confidence Intervals"),
@@ -1975,7 +2189,7 @@ ui <- dashboardPage(
                   icon("info-circle"),
                   " 95% confidence intervals for the regression coefficients (β₀ and β₁)."
                 ),
-                verbatimTextOutput("slrConfint")
+                uiOutput("slrConfint")
               ),
               tabPanel(
                 tagList(icon("link"), " Correlation Tests"),
@@ -1985,7 +2199,7 @@ ui <- dashboardPage(
                   icon("info-circle"),
                   " Pearson (parametric), Spearman, and Kendall correlation tests between X and Y."
                 ),
-                verbatimTextOutput("slrCorrelation")
+                uiOutput("slrCorrelation")
               )
             )
           )
@@ -2057,9 +2271,9 @@ ui <- dashboardPage(
                 tags$div(
                   class = "reg-help-alert",
                   icon("info-circle"),
-                  " Checks whether each new X falls inside (interpolation) or outside\n                  (EXTRAPOLATION) the observed data range. Extrapolation predictions are unreliable."
+                  " Checks whether each new X falls inside (interpolation) or outside (EXTRAPOLATION) the observed data range. Extrapolation predictions are unreliable."
                 ),
-                verbatimTextOutput("slrInterpExtrap")
+                uiOutput("slrInterpExtrap")
               )
             )
           )
@@ -2178,9 +2392,9 @@ ui <- dashboardPage(
                 tags$div(
                   class = "reg-help-alert",
                   icon("info-circle"),
-                  " Displays fitted coefficients, standard errors, t-tests for each predictor,\n                  overall F-test, R², and adjusted R²."
+                  " Displays fitted coefficients, standard errors, t-tests for each predictor, overall F-test, R², and adjusted R²."
                 ),
-                verbatimTextOutput("mlrSummary")
+                uiOutput("mlrSummary")
               ),
               tabPanel(
                 tagList(icon("calculator"), " ANOVA Table"),
@@ -2188,9 +2402,9 @@ ui <- dashboardPage(
                 tags$div(
                   class = "reg-help-alert",
                   icon("info-circle"),
-                  " Sequential (Type I) ANOVA — shows the contribution of each predictor\n                  added in order."
+                  " Sequential (Type I) ANOVA — shows the contribution of each predictor added in order."
                 ),
-                verbatimTextOutput("mlrAnova")
+                uiOutput("mlrAnova")
               ),
               tabPanel(
                 tagList(icon("vial"), " Partial F-Tests"),
@@ -2198,9 +2412,9 @@ ui <- dashboardPage(
                 tags$div(
                   class = "reg-help-alert",
                   icon("info-circle"),
-                  " Tests H₀: βᵢ = 0 for each predictor by comparing the full model against\n                  a reduced model without that predictor."
+                  " Tests H₀: βᵢ = 0 for each predictor by comparing the full model against a reduced model without that predictor."
                 ),
-                verbatimTextOutput("mlrPartialF")
+                uiOutput("mlrPartialF")
               ),
               tabPanel(
                 tagList(icon("arrows-alt-h"), " Confidence Intervals"),
@@ -2210,7 +2424,7 @@ ui <- dashboardPage(
                   icon("info-circle"),
                   " 95% confidence intervals for all regression coefficients."
                 ),
-                verbatimTextOutput("mlrConfint")
+                uiOutput("mlrConfint")
               )
             )
           )
@@ -2239,7 +2453,7 @@ ui <- dashboardPage(
             class = "reg-card",
             title = tagList(icon("list-ol"), " VIF Values"),
             solidHeader = TRUE, status = "danger", width = 4,
-            verbatimTextOutput("mlrVIF")
+            uiOutput("mlrVIF")
           ),
           box(
             class = "reg-card",
@@ -2310,9 +2524,9 @@ ui <- dashboardPage(
                 tags$div(
                   class = "reg-help-alert",
                   icon("info-circle"),
-                  " Uses leverage values (hᵢᵢ) to detect whether new observations fall\n                  inside (interpolation) or outside (EXTRAPOLATION) the predictor space."
+                  " Uses leverage values (hᵢᵢ) to detect whether new observations fall inside (interpolation) or outside (EXTRAPOLATION) the predictor space."
                 ),
-                verbatimTextOutput("mlrInterpExtrap")
+                uiOutput("mlrInterpExtrap")
               )
             )
           )
@@ -2422,7 +2636,7 @@ ui <- dashboardPage(
             class = "reg-card",
             title = tagList(icon("calculator"), " Selected Polynomial Summary"),
             solidHeader = TRUE, status = "info", width = 6,
-            verbatimTextOutput("polySummary")
+            uiOutput("polySummary")
           ),
           box(
             class = "reg-card",
@@ -2459,7 +2673,7 @@ ui <- dashboardPage(
             class = "reg-card",
             title = tagList(icon("list-ol"), " Centering Interpretation"),
             solidHeader = TRUE, status = "success", width = 12,
-            verbatimTextOutput("polyCenterText")
+            uiOutput("polyCenterText")
           )
         ),
 
@@ -2490,7 +2704,7 @@ ui <- dashboardPage(
             class = "reg-card",
             title = tagList(icon("calculator"), " Cubic Spline Summary"),
             solidHeader = TRUE, status = "warning", width = 6,
-            verbatimTextOutput("polySplineSummary")
+            uiOutput("polySplineSummary")
           ),
           box(
             class = "reg-card",
@@ -4191,34 +4405,6 @@ server <- function(input, output, session) {
     }
   })
 
-  # Info boxes
-  output$rowCountBox <- renderInfoBox({
-    infoBox(
-      "Total Records",
-      ifelse(is.null(data$raw), 0, nrow(data$raw)),
-      icon = icon("database"),
-      color = "blue"
-    )
-  })
-
-  output$colCountBox <- renderInfoBox({
-    infoBox(
-      "Total Variables",
-      ifelse(is.null(data$raw), 0, ncol(data$raw)),
-      icon = icon("columns"),
-      color = "green"
-    )
-  })
-
-  output$statusBox <- renderInfoBox({
-    infoBox(
-      "Status",
-      ifelse(data$analyzed, "Ready", "Upload Data"),
-      icon = icon(ifelse(data$analyzed, "check-circle", "upload")),
-      color = ifelse(data$analyzed, "green", "yellow")
-    )
-  })
-
   output$kpiRows <- renderInfoBox({
     infoBox("Rows", ifelse(is.null(data$raw), 0, format(nrow(data$raw), big.mark = ",")),
       icon = icon("table"), color = "blue", fill = TRUE
@@ -4253,7 +4439,7 @@ server <- function(input, output, session) {
       options = list(
         pageLength = 15,
         scrollX = TRUE,
-        scrollY = "450px",
+        scrollY = "520px",
         fixedHeader = TRUE,
         dom = "Bfrtip",
         buttons = c("copy", "csv", "excel")
@@ -4283,7 +4469,7 @@ server <- function(input, output, session) {
       Missing = sapply(dnum, function(x) sum(is.na(x)))
     )
     DT::datatable(tbl,
-      options = list(pageLength = 8, scrollX = TRUE),
+      options = list(pageLength = 8, scrollX = TRUE, scrollY = "260px"),
       rownames = FALSE
     )
   })
@@ -4311,7 +4497,7 @@ server <- function(input, output, session) {
       stringsAsFactors = FALSE
     )
     DT::datatable(tbl,
-      options = list(pageLength = 8, scrollX = TRUE),
+      options = list(pageLength = 8, scrollX = TRUE, scrollY = "260px"),
       rownames = FALSE
     )
   })
@@ -4323,6 +4509,161 @@ server <- function(input, output, session) {
     updateTabItems(session, "tabs", selected = "upload")
     showNotification("Data ready for analysis!", type = "message", duration = 3)
   })
+
+  fmt_value <- function(x, digits = 3) {
+    if (length(x) == 0 || is.null(x) || all(is.na(x))) {
+      return("N/A")
+    }
+    x <- x[1]
+    if (is.numeric(x)) {
+      if (!is.finite(x)) return("N/A")
+      return(format(round(x, digits), big.mark = ",", scientific = FALSE, trim = TRUE))
+    }
+    as.character(x)
+  }
+
+  p_status <- function(p) {
+    if (length(p) == 0 || is.na(p)) return("bad")
+    if (p < 0.05) "ok" else if (p < 0.10) "warn" else "neutral"
+  }
+
+  p_label <- function(p) {
+    if (length(p) == 0 || is.na(p)) return("Could not compute")
+    if (p < 0.05) "Statistically significant" else if (p < 0.10) "Borderline evidence" else "No clear evidence"
+  }
+
+  va_pill <- function(text, status = "neutral", icon_name = NULL) {
+    tags$span(
+      class = paste("va-pill", status),
+      if (!is.null(icon_name)) icon(icon_name),
+      text
+    )
+  }
+
+  va_metric <- function(label, value, note = NULL, status = "neutral") {
+    tags$div(
+      class = paste("va-metric-card", paste0("va-status-", status)),
+      tags$span(label),
+      tags$strong(value),
+      if (!is.null(note)) tags$small(note)
+    )
+  }
+
+  va_interpretation <- function(title, body, pills = NULL) {
+    tags$div(
+      class = "va-interpretation",
+      if (!is.null(pills)) tags$div(class = "va-pill-row", pills),
+      tags$h5(title),
+      tags$p(style = "margin:0;", body)
+    )
+  }
+
+  va_details <- function(title, lines) {
+    tags$details(
+      class = "va-detail",
+      tags$summary(title),
+      tags$pre(paste(lines, collapse = "\n"))
+    )
+  }
+
+  va_table <- function(df) {
+    if (is.null(df) || nrow(df) == 0) {
+      return(tags$div(class = "va-empty", "No rows to display."))
+    }
+    tags$table(
+      class = "va-table",
+      tags$thead(tags$tr(lapply(names(df), tags$th))),
+      tags$tbody(lapply(seq_len(nrow(df)), function(i) {
+        tags$tr(lapply(df[i, , drop = FALSE], function(x) tags$td(as.character(x[[1]]))))
+      }))
+    )
+  }
+
+  skew_status <- function(sk) {
+    if (is.na(sk)) return("bad")
+    if (abs(sk) < 0.5) "ok" else if (abs(sk) < 1) "warn" else "bad"
+  }
+
+  corr_status <- function(r) {
+    if (is.na(r)) return("bad")
+    ar <- abs(r)
+    if (ar < 0.3) "ok" else if (ar < 0.7) "warn" else "bad"
+  }
+
+  cramers_status <- function(v) {
+    if (length(v) == 0 || is.na(v)) return("bad")
+    if (v < 0.1) "ok" else if (v < 0.3) "neutral" else if (v < 0.5) "warn" else "bad"
+  }
+
+  cramers_label <- function(v) {
+    if (length(v) == 0 || is.na(v)) return("Could not compute")
+    if (v < 0.1) "Negligible association" else if (v < 0.3) "Weak association" else if (v < 0.5) "Moderate association" else "Strong association"
+  }
+
+  clean_cat_vector <- function(x) {
+    x <- as.character(x)
+    x[is.na(x) | trimws(x) == ""] <- NA_character_
+    factor(x)
+  }
+
+  cat_count_df <- function(x, max_levels = Inf) {
+    x <- clean_cat_vector(x)
+    freq <- table(x, useNA = "no")
+    prop <- prop.table(freq)
+    df <- data.frame(
+      Category = names(freq),
+      Count = as.integer(freq),
+      Percent = paste0(round(100 * as.numeric(prop), 1), "%"),
+      Share = as.numeric(prop),
+      check.names = FALSE
+    )
+    df <- df[order(df$Count, decreasing = TRUE), , drop = FALSE]
+    if (is.finite(max_levels) && nrow(df) > max_levels) {
+      top <- df[seq_len(max_levels - 1), , drop = FALSE]
+      other <- data.frame(
+        Category = "Other levels",
+        Count = sum(df$Count[-seq_len(max_levels - 1)]),
+        Percent = paste0(round(100 * sum(df$Share[-seq_len(max_levels - 1)]), 1), "%"),
+        Share = sum(df$Share[-seq_len(max_levels - 1)]),
+        check.names = FALSE
+      )
+      df <- rbind(top, other)
+    }
+    df
+  }
+
+  va_palette <- function(n, palette = "Set2") {
+    n <- max(1, n)
+    base_n <- min(max(3, n), 8)
+    if (n <= 8) {
+      RColorBrewer::brewer.pal(base_n, palette)[seq_len(n)]
+    } else {
+      grDevices::colorRampPalette(RColorBrewer::brewer.pal(8, palette))(n)
+    }
+  }
+
+  va_plot_theme <- function() {
+    ggplot2::theme_minimal(base_size = 13) +
+      ggplot2::theme(
+        plot.background = ggplot2::element_rect(fill = "#0f172a", color = NA),
+        panel.background = ggplot2::element_rect(fill = "#0f172a", color = NA),
+        panel.grid.major = ggplot2::element_line(color = "#26364d", linewidth = 0.25),
+        panel.grid.minor = ggplot2::element_blank(),
+        plot.title = ggplot2::element_text(color = "#f8fafc", face = "bold"),
+        plot.subtitle = ggplot2::element_text(color = "#cbd5e1"),
+        axis.title = ggplot2::element_text(color = "#dbeafe", face = "bold"),
+        axis.text = ggplot2::element_text(color = "#cbd5e1"),
+        legend.title = ggplot2::element_text(color = "#dbeafe", face = "bold"),
+        legend.text = ggplot2::element_text(color = "#cbd5e1"),
+        legend.background = ggplot2::element_rect(fill = "#0f172a", color = NA),
+        strip.background = ggplot2::element_rect(fill = "#111c30", color = "#334155"),
+        strip.text = ggplot2::element_text(color = "#f8fafc", face = "bold")
+      )
+  }
+
+  capture_lines <- function(expr) {
+    tryCatch(capture.output(expr), error = function(e) paste("Could not compute technical output:", e$message))
+  }
 
   # ===== SINGLE VARIABLE ANALYSIS =====
 
@@ -4341,93 +4682,242 @@ server <- function(input, output, session) {
 
     if (input$singleVarType == "Numerical") {
       var_data <- data$raw[[input$singleVar]]
+      valid_data <- var_data[is.finite(var_data)]
+      n_total <- length(var_data)
+      n_valid <- length(valid_data)
+      n_missing <- sum(is.na(var_data) | !is.finite(var_data))
 
-      output$singleStats <- renderPrint({
-        cat("Descriptive Statistics for", input$singleVar, "\n")
-        cat(strrep("=", 50), "\n\n")
-        cat("Central Tendency:\n")
-        cat("  Mean   :", round(mean(var_data, na.rm = TRUE), 3), "\n")
-        cat("  Median :", round(median(var_data, na.rm = TRUE), 3), "\n")
-        cat("  Mode   :", names(sort(table(var_data), decreasing = TRUE)[1]), "\n\n")
+      output$singleStats <- renderUI({
+        if (n_valid == 0) {
+          return(tags$div(class = "va-empty", "No finite numeric values are available for this variable."))
+        }
 
-        cat("Dispersion:\n")
-        cat("  Range      :", round(max(var_data, na.rm = TRUE) - min(var_data, na.rm = TRUE), 3), "\n")
-        cat("  Variance   :", round(var(var_data, na.rm = TRUE), 3), "\n")
-        cat("  Std Dev    :", round(sd(var_data, na.rm = TRUE), 3), "\n")
-        cat("  IQR        :", round(IQR(var_data, na.rm = TRUE), 3), "\n\n")
+        mean_v <- mean(valid_data)
+        median_v <- median(valid_data)
+        sd_v <- if (n_valid > 1) sd(valid_data) else NA_real_
+        iqr_v <- IQR(valid_data)
+        mode_v <- names(sort(table(valid_data), decreasing = TRUE)[1])
+        skew_v <- if (n_valid > 2) moments::skewness(valid_data, na.rm = TRUE) else NA_real_
+        kurt_v <- if (n_valid > 3) moments::kurtosis(valid_data, na.rm = TRUE) else NA_real_
+        mean_median_gap <- abs(mean_v - median_v)
+        gap_note <- if (!is.na(sd_v) && sd_v > 0) {
+          paste0("Mean-median gap is ", fmt_value(mean_median_gap / sd_v, 2), " SD.")
+        } else {
+          "Mean and median comparison is limited because spread is zero or unavailable."
+        }
+        skew_msg <- if (is.na(skew_v)) {
+          "Skewness needs at least three finite values."
+        } else if (abs(skew_v) < 0.5) {
+          "The distribution is roughly symmetric."
+        } else if (skew_v > 0) {
+          "The distribution is right-skewed; high values pull the mean upward."
+        } else {
+          "The distribution is left-skewed; low values pull the mean downward."
+        }
+        missing_status <- if (n_missing == 0) "ok" else "warn"
 
-        cat("Shape:\n")
-        cat("  Skewness   :", round(skewness(var_data, na.rm = TRUE), 3), "\n")
-        cat("  Kurtosis   :", round(kurtosis(var_data, na.rm = TRUE), 3), "\n")
+        tags$div(
+          class = "va-summary",
+          tags$div(
+            class = "va-metric-grid",
+            va_metric("Valid values", format(n_valid, big.mark = ","), paste("Out of", format(n_total, big.mark = ",")), "ok"),
+            va_metric("Missing / non-finite", format(n_missing, big.mark = ","), "Ignored in descriptive statistics", missing_status),
+            va_metric("Mean", fmt_value(mean_v), "Average value", "neutral"),
+            va_metric("Median", fmt_value(median_v), "Middle value", "neutral"),
+            va_metric("Std. deviation", fmt_value(sd_v), "Typical spread around the mean", ifelse(is.na(sd_v), "bad", "neutral")),
+            va_metric("IQR", fmt_value(iqr_v), "Middle 50% spread", "neutral")
+          ),
+          va_interpretation(
+            paste("What this says about", input$singleVar),
+            paste(skew_msg, gap_note, "Outliers are best checked with the boxplot."),
+            pills = tagList(
+              va_pill(paste("Skewness:", fmt_value(skew_v)), skew_status(skew_v), ifelse(skew_status(skew_v) == "ok", "check-circle", ifelse(skew_status(skew_v) == "warn", "exclamation-triangle", "times-circle"))),
+              va_pill(paste("Kurtosis:", fmt_value(kurt_v)), "neutral", "chart-area")
+            )
+          ),
+          va_details(
+            "Technical details: descriptive statistics",
+            c(
+              paste("Variable:", input$singleVar),
+              paste("Mean:", fmt_value(mean_v)),
+              paste("Median:", fmt_value(median_v)),
+              paste("Mode:", mode_v %||% "N/A"),
+              paste("Range:", fmt_value(max(valid_data) - min(valid_data))),
+              paste("Variance:", fmt_value(if (n_valid > 1) var(valid_data) else NA_real_)),
+              paste("Std Dev:", fmt_value(sd_v)),
+              paste("IQR:", fmt_value(iqr_v)),
+              paste("Skewness:", fmt_value(skew_v)),
+              paste("Kurtosis:", fmt_value(kurt_v)),
+              "Rules of thumb: |skewness| < 0.5 is roughly symmetric; 0.5-1 is moderate skew; > 1 is strong skew."
+            )
+          )
+        )
       })
 
       output$singlePlot <- renderPlot({
-        par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
-
-        hist(var_data,
-          freq = TRUE,
-          main = paste("Histogram of", input$singleVar),
-          col = "lightblue",
-          xlab = input$singleVar,
-          border = "darkblue"
-        )
-
-        boxplot(var_data,
-          main = paste("Boxplot of", input$singleVar),
-          xlab = input$singleVar,
-          col = "lightgreen",
-          horizontal = TRUE
-        )
+        req(n_valid > 0)
+        plot_df <- data.frame(value = valid_data)
+        p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = value)) +
+          ggplot2::geom_histogram(
+            ggplot2::aes(y = ggplot2::after_stat(density)),
+            bins = min(35, max(8, ceiling(sqrt(n_valid)))),
+            fill = "#38bdf8", color = "#0f172a", alpha = 0.78
+          ) +
+          ggplot2::geom_vline(xintercept = mean(valid_data), color = "#22c55e", linewidth = 1.1) +
+          ggplot2::geom_vline(xintercept = median(valid_data), color = "#f59e0b", linewidth = 1.1, linetype = "dashed") +
+          ggplot2::geom_rug(color = "#93c5fd", alpha = 0.35) +
+          ggplot2::labs(
+            title = paste("Distribution of", input$singleVar),
+            subtitle = "Histogram scaled to density; green line = mean, amber dashed line = median",
+            x = input$singleVar,
+            y = "Density"
+          ) +
+          va_plot_theme()
+        if (length(unique(valid_data)) > 1) {
+          p <- p + ggplot2::geom_density(color = "#f8fafc", linewidth = 1.1, adjust = 1.1)
+        }
+        print(p)
       })
       if (HAS_PLOTLY) {
         output$singlePlotly <- plotly::renderPlotly({
-          p1 <- plotly::plot_ly(x = var_data, type = "histogram", marker = list(color = "#60a5fa")) |>
-            plotly::layout(title = paste("Histogram of", input$singleVar))
-          p2 <- plotly::plot_ly(y = var_data, type = "box", marker = list(color = "#34d399")) |>
-            plotly::layout(title = paste("Boxplot of", input$singleVar))
+          req(n_valid > 0)
+          p1 <- plotly::plot_ly(x = valid_data, type = "histogram", histnorm = "probability density", marker = list(color = "#38bdf8")) |>
+            plotly::layout(
+              title = paste("Distribution of", input$singleVar),
+              xaxis = list(title = input$singleVar),
+              yaxis = list(title = "Density"),
+              shapes = list(
+                list(type = "line", x0 = mean(valid_data), x1 = mean(valid_data), y0 = 0, y1 = 1, yref = "paper", line = list(color = "#22c55e", width = 2)),
+                list(type = "line", x0 = median(valid_data), x1 = median(valid_data), y0 = 0, y1 = 1, yref = "paper", line = list(color = "#f59e0b", width = 2, dash = "dash"))
+              )
+            )
+          p2 <- plotly::plot_ly(x = valid_data, type = "box", marker = list(color = "#34d399"), boxpoints = "outliers") |>
+            plotly::layout(title = paste("Outlier check for", input$singleVar), xaxis = list(title = input$singleVar))
           plotly::subplot(p1, p2, nrows = 2, shareX = FALSE, titleY = TRUE)
         })
       }
     } else {
       var_data <- data$raw[[input$singleVar]]
-      freq_table <- table(var_data)
+      missing_cat <- is.na(var_data) | trimws(as.character(var_data)) == ""
+      freq_table <- table(var_data[!missing_cat])
       prop_table <- prop.table(freq_table)
 
-      output$singleStats <- renderPrint({
-        cat("Frequency Distribution for", input$singleVar, "\n")
-        cat(strrep("=", 50), "\n\n")
-        cat("Frequency Table:\n")
-        print(freq_table)
-        cat("\n\nProportion Table:\n")
-        print(round(prop_table, 4))
-        cat("\n\nMode:", names(which.max(freq_table)), "\n")
-        cat("Modal Frequency:", max(freq_table), "\n")
+      output$singleStats <- renderUI({
+        if (length(freq_table) == 0) {
+          return(tags$div(class = "va-empty", "No non-missing categories are available for this variable."))
+        }
+        mode_name <- names(which.max(freq_table))
+        mode_freq <- max(freq_table)
+        mode_pct <- mode_freq / sum(freq_table)
+        missing_n <- sum(missing_cat)
+        top_df <- data.frame(
+          Level = names(freq_table),
+          Count = as.integer(freq_table),
+          Percent = paste0(round(100 * as.numeric(prop_table), 1), "%"),
+          check.names = FALSE
+        )
+        top_df <- top_df[order(top_df$Count, decreasing = TRUE), , drop = FALSE]
+
+        concentration_status <- if (mode_pct >= 0.75) "warn" else "ok"
+        concentration_msg <- if (mode_pct >= 0.75) {
+          "One category dominates the variable, so comparisons involving smaller groups may be unstable."
+        } else {
+          "The categories are not dominated by a single level."
+        }
+
+        tags$div(
+          class = "va-summary",
+          tags$div(
+            class = "va-metric-grid",
+            va_metric("Levels", length(freq_table), "Distinct non-missing categories", "neutral"),
+            va_metric("Most common", mode_name, paste0(mode_freq, " rows (", round(100 * mode_pct, 1), "%)"), concentration_status),
+            va_metric("Non-missing rows", format(sum(freq_table), big.mark = ","), "Used in frequency table", "ok"),
+            va_metric("Missing / blank", format(missing_n, big.mark = ","), "Excluded from proportions", ifelse(missing_n == 0, "ok", "warn"))
+          ),
+          va_interpretation(
+            paste("What this says about", input$singleVar),
+            concentration_msg,
+            pills = tagList(
+              va_pill(paste("Mode:", mode_name), concentration_status, ifelse(concentration_status == "ok", "check-circle", "exclamation-triangle")),
+              va_pill(paste("Top share:", paste0(round(100 * mode_pct, 1), "%")), "neutral", "chart-pie")
+            )
+          ),
+          va_table(head(top_df, 12)),
+          va_details(
+            "Technical details: full frequency table",
+            c(
+              paste("Variable:", input$singleVar),
+              "Frequency table:",
+              capture.output(print(freq_table)),
+              "",
+              "Proportion table:",
+              capture.output(print(round(prop_table, 4))),
+              "",
+              paste("Mode:", mode_name),
+              paste("Modal frequency:", mode_freq)
+            )
+          )
+        )
       })
 
       output$singlePlot <- renderPlot({
-        par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
-
-        barplot(freq_table,
-          main = paste("Bar Plot of", input$singleVar),
-          xlab = input$singleVar,
-          ylab = "Frequency",
-          col = brewer.pal(min(length(freq_table), 8), "Set2"),
-          las = 2
+        req(length(freq_table) > 0)
+        dfp <- data.frame(
+          level = names(freq_table),
+          count = as.numeric(freq_table),
+          percent = as.numeric(prop_table)
         )
-
-        pie(freq_table,
-          main = paste("Pie Chart of", input$singleVar),
-          col = brewer.pal(min(length(freq_table), 8), "Pastel1")
-        )
+        dfp <- dfp[order(dfp$count, decreasing = TRUE), , drop = FALSE]
+        if (nrow(dfp) > 18) {
+          top <- dfp[seq_len(17), , drop = FALSE]
+          other <- data.frame(
+            level = "Other levels",
+            count = sum(dfp$count[-seq_len(17)]),
+            percent = sum(dfp$percent[-seq_len(17)])
+          )
+          dfp <- rbind(top, other)
+        }
+        dfp$level <- factor(dfp$level, levels = rev(dfp$level))
+        ggplot2::ggplot(dfp, ggplot2::aes(x = level, y = count, fill = percent)) +
+          ggplot2::geom_col(width = 0.72) +
+          ggplot2::geom_text(
+            ggplot2::aes(label = paste0(round(percent * 100, 1), "%")),
+            hjust = -0.1, color = "#e5e7eb", size = 3.6
+          ) +
+          ggplot2::coord_flip(clip = "off") +
+          ggplot2::scale_fill_gradient(low = "#2563eb", high = "#22c55e", labels = function(x) paste0(round(100 * x), "%")) +
+          ggplot2::labs(
+            title = paste("Category profile of", input$singleVar),
+            subtitle = "Bars are sorted by frequency; labels show share of non-missing rows",
+            x = NULL,
+            y = "Count",
+            fill = "Share"
+          ) +
+          va_plot_theme() +
+          ggplot2::theme(plot.margin = ggplot2::margin(10, 42, 10, 10))
       })
       if (HAS_PLOTLY) {
         output$singlePlotly <- plotly::renderPlotly({
-          dfp <- data.frame(cat = names(freq_table), freq = as.numeric(freq_table))
-          if (input$catPlotType == "Pie Chart") {
-            plotly::plot_ly(dfp, labels = ~cat, values = ~freq, type = "pie")
-          } else {
-            plotly::plot_ly(dfp, x = ~cat, y = ~freq, type = "bar", marker = list(color = "#60a5fa"))
-          }
+          req(length(freq_table) > 0)
+          dfp <- data.frame(
+            cat = names(freq_table),
+            freq = as.numeric(freq_table),
+            pct = round(100 * as.numeric(prop_table), 1)
+          )
+          dfp <- dfp[order(dfp$freq, decreasing = TRUE), , drop = FALSE]
+          plotly::plot_ly(
+            dfp,
+            x = ~freq, y = ~reorder(cat, freq),
+            type = "bar", orientation = "h",
+            text = ~paste0(pct, "%"),
+            textposition = "outside",
+            marker = list(color = "#38bdf8")
+          ) |>
+            plotly::layout(
+              title = paste("Category profile of", input$singleVar),
+              xaxis = list(title = "Count"),
+              yaxis = list(title = "")
+            )
         })
       }
     }
@@ -4503,95 +4993,417 @@ server <- function(input, output, session) {
       df_sel <- data$raw[, unique(selected_vars), drop = FALSE]
       incProgress(0.35)
 
-      output$twoVarStats <- renderPrint({
-        cat("Multi-Variable Analysis\n")
-        cat(strrep("=", 55), "\n\n")
-        cat("Selected variables:\n")
-        for (i in seq_len(n_vars)) {
-          cat(sprintf("  %d) %-30s [%s]\n", i, selected_vars[i], selected_types[i]))
-        }
+      visual_supported <- nrow(df_sel) > 0 && (length(num_vars) + length(cat_vars) >= 2)
+      output$multiAnalysisOutputUI <- renderUI({
+        tagList(
+          fluidRow(
+            box(
+              title = "Analysis Results",
+              status = "success",
+              solidHeader = TRUE,
+              width = 12,
+              uiOutput("twoVarStats")
+            )
+          ),
+          if (visual_supported) {
+            fluidRow(
+              box(
+                title = "Visualization",
+                status = "success",
+                solidHeader = TRUE,
+                width = 12,
+                class = "va-visual-card",
+                conditionalPanel(
+                  condition = "input.interactivePlots",
+                  spn(plotly_output_safe("twoVarPlotly", height = "600px"))
+                ),
+                conditionalPanel(
+                  condition = "!input.interactivePlots",
+                  spn(plotOutput("twoVarPlot", height = "600px"))
+                )
+              )
+            )
+          }
+        )
+      })
 
-        if (length(num_vars) >= 2) {
-          cat("\n\nNumerical Block: Correlation Matrix\n")
-          cat(strrep("-", 55), "\n")
-          corr_mat <- cor(df_sel[, num_vars, drop = FALSE], use = "complete.obs")
-          print(round(corr_mat, 4))
-        }
+      selected_tbl <- data.frame(
+        Variable = selected_vars,
+        Type = selected_types,
+        Missing = vapply(selected_vars, function(v) sum(is.na(df_sel[[v]])), integer(1)),
+        check.names = FALSE
+      )
 
-        if (length(cat_vars) >= 2) {
-          cat("\n\nCategorical Block: Pairwise Chi-Square Tests\n")
-          cat(strrep("-", 55), "\n")
-          for (i in 1:(length(cat_vars) - 1)) {
-            for (j in (i + 1):length(cat_vars)) {
-              t_ij <- table(df_sel[[cat_vars[i]]], df_sel[[cat_vars[j]]])
-              cat("\n", cat_vars[i], "vs", cat_vars[j], "\n")
+      corr_mat <- NULL
+      corr_summary <- NULL
+      if (length(num_vars) >= 2) {
+        corr_mat <- tryCatch(cor(df_sel[, num_vars, drop = FALSE], use = "complete.obs"), error = function(e) NULL)
+        if (!is.null(corr_mat)) {
+          upper_idx <- upper.tri(corr_mat)
+          upper_vals <- abs(corr_mat[upper_idx])
+          if (length(upper_vals) > 0 && any(is.finite(upper_vals))) {
+            max_pos <- which(upper_idx, arr.ind = TRUE)[which.max(upper_vals), , drop = FALSE]
+            r_val <- corr_mat[max_pos[1, 1], max_pos[1, 2]]
+            corr_summary <- list(
+              r = r_val,
+              var1 = rownames(corr_mat)[max_pos[1, 1]],
+              var2 = colnames(corr_mat)[max_pos[1, 2]],
+              status = corr_status(r_val)
+            )
+          }
+        }
+      }
+
+      chi_results <- list()
+      if (length(cat_vars) >= 2) {
+        for (i in 1:(length(cat_vars) - 1)) {
+          for (j in (i + 1):length(cat_vars)) {
+            t_ij <- table(df_sel[[cat_vars[i]]], df_sel[[cat_vars[j]]])
+            res <- tryCatch(
+              {
+                ch <- suppressWarnings(chisq.test(t_ij))
+                list(
+                  var1 = cat_vars[i],
+                  var2 = cat_vars[j],
+                  statistic = unname(ch$statistic),
+                  df = unname(ch$parameter),
+                  p = ch$p.value,
+                  low_expected = any(ch$expected < 5),
+                  error = NULL
+                )
+              },
+              error = function(e) {
+                list(var1 = cat_vars[i], var2 = cat_vars[j], error = e$message)
+              }
+            )
+            chi_results[[length(chi_results) + 1]] <- res
+          }
+        }
+      }
+
+      anova_results <- list()
+      if (length(num_vars) >= 1 && length(cat_vars) >= 1) {
+        for (nv in num_vars) {
+          for (cv in cat_vars) {
+            tmp <- data.frame(y = df_sel[[nv]], g = as.factor(df_sel[[cv]]))
+            tmp <- tmp[complete.cases(tmp), , drop = FALSE]
+            res <- if (nlevels(tmp$g) < 2 || nrow(tmp) < 3) {
+              list(num = nv, cat = cv, error = "Not enough valid groups/data for ANOVA.")
+            } else {
               tryCatch(
                 {
-                  ch <- chisq.test(t_ij)
-                  cat(
-                    "  Chi-square:", round(ch$statistic, 4),
-                    " df:", ch$parameter,
-                    " p-value:", format.pval(ch$p.value, digits = 4), "\n"
+                  aov_out <- summary(aov(y ~ g, data = tmp))
+                  tbl <- aov_out[[1]]
+                  list(
+                    num = nv,
+                    cat = cv,
+                    f_value = unname(tbl[1, "F value"]),
+                    p = unname(tbl[1, "Pr(>F)"]),
+                    groups = nlevels(tmp$g),
+                    n = nrow(tmp),
+                    technical = capture.output(print(aov_out)),
+                    error = NULL
                   )
                 },
-                error = function(e) {
-                  cat("  Test could not be computed:", e$message, "\n")
-                }
+                error = function(e) list(num = nv, cat = cv, error = e$message)
               )
             }
+            anova_results[[length(anova_results) + 1]] <- res
           }
+        }
+      }
+
+      output$twoVarStats <- renderUI({
+        sections <- list(
+          tags$div(
+            class = "va-summary",
+            va_interpretation(
+              "Selected variables",
+              "The analysis below is grouped by variable type: numeric-numeric relationships use correlations, categorical-categorical relationships use chi-square tests, and numeric-categorical relationships use one-way ANOVA.",
+              pills = tagList(
+                va_pill(paste(length(num_vars), "numeric"), "neutral", "hashtag"),
+                va_pill(paste(length(cat_vars), "categorical"), "neutral", "tags")
+              )
+            ),
+            va_table(selected_tbl)
+          )
+        )
+
+        if (length(num_vars) >= 2) {
+          corr_body <- if (is.null(corr_summary)) {
+            tags$div(class = "va-empty", "The correlation matrix could not be computed. Check for too few complete numeric rows or constant variables.")
+          } else {
+            tagList(
+              tags$div(
+                class = "va-metric-grid",
+                va_metric("Strongest absolute r", fmt_value(abs(corr_summary$r), 3), paste(corr_summary$var1, "vs", corr_summary$var2), corr_summary$status),
+                va_metric("Direction", ifelse(corr_summary$r >= 0, "Positive", "Negative"), "Sign shows whether variables move together or in opposite directions.", "neutral")
+              ),
+              va_interpretation(
+                "Numeric relationship",
+                "Correlation ranges from -1 to 1. Values near 0 suggest weak linear association; values near -1 or 1 suggest stronger linear association. Correlation does not prove causation.",
+                pills = tagList(
+                  va_pill(ifelse(abs(corr_summary$r) >= 0.7, "Strong linear association", ifelse(abs(corr_summary$r) >= 0.3, "Moderate linear association", "Weak linear association")), corr_summary$status, ifelse(corr_summary$status == "ok", "check-circle", ifelse(corr_summary$status == "warn", "exclamation-triangle", "times-circle")))
+                )
+              ),
+              va_details(
+                "Technical details: correlation matrix",
+                capture.output(print(round(corr_mat, 4)))
+              )
+            )
+          }
+          sections[[length(sections) + 1]] <- tags$div(class = "va-summary", corr_body)
         }
 
-        if (length(num_vars) >= 1 && length(cat_vars) >= 1) {
-          cat("\n\nMixed Block: Group Mean Comparisons (ANOVA)\n")
-          cat(strrep("-", 55), "\n")
-          for (nv in num_vars) {
-            for (cv in cat_vars) {
-              cat("\n", nv, "by", cv, "\n")
-              tmp <- data.frame(y = df_sel[[nv]], g = as.factor(df_sel[[cv]]))
-              tmp <- tmp[complete.cases(tmp), , drop = FALSE]
-              if (nlevels(tmp$g) < 2 || nrow(tmp) < 3) {
-                cat("  Not enough valid groups/data for ANOVA.\n")
-              } else {
-                aov_out <- summary(aov(y ~ g, data = tmp))
-                print(aov_out)
-              }
+        if (length(chi_results) > 0) {
+          chi_df <- do.call(rbind, lapply(chi_results, function(x) {
+            if (!is.null(x$error)) {
+              data.frame(Comparison = paste(x$var1, "vs", x$var2), Chi_square = "N/A", df = "N/A", P_value = "N/A", Result = x$error, check.names = FALSE)
+            } else {
+              data.frame(
+                Comparison = paste(x$var1, "vs", x$var2),
+                Chi_square = fmt_value(x$statistic),
+                df = fmt_value(x$df, 0),
+                P_value = format.pval(x$p, digits = 4),
+                Result = paste(p_label(x$p), if (isTRUE(x$low_expected)) "(expected counts warning)" else ""),
+                check.names = FALSE
+              )
             }
-          }
+          }))
+          sections[[length(sections) + 1]] <- tags$div(
+            class = "va-summary",
+            va_interpretation(
+              "Categorical relationships",
+              "Chi-square tests compare observed counts to the counts expected if the variables were independent. H0: the variables are independent. Small p-values suggest an association, but sparse tables can make the approximation unreliable.",
+              pills = tagList(
+                va_pill(paste(length(chi_results), "pairwise test(s)"), "neutral", "calculator"),
+                va_pill("p < 0.05: evidence of association", "ok", "check-circle")
+              )
+            ),
+            va_table(chi_df),
+            va_details(
+              "Technical details: chi-square tests",
+              unlist(lapply(chi_results, function(x) {
+                if (!is.null(x$error)) {
+                  return(c(paste(x$var1, "vs", x$var2), paste("Error:", x$error), ""))
+                }
+                c(
+                  paste(x$var1, "vs", x$var2),
+                  paste("Chi-square:", fmt_value(x$statistic), "df:", fmt_value(x$df, 0), "p-value:", format.pval(x$p, digits = 4)),
+                  paste("Expected counts warning:", ifelse(isTRUE(x$low_expected), "Yes; some expected counts are below 5.", "No.")),
+                  ""
+                )
+              }))
+            )
+          )
         }
+
+        if (length(anova_results) > 0) {
+          anova_df <- do.call(rbind, lapply(anova_results, function(x) {
+            if (!is.null(x$error)) {
+              data.frame(Comparison = paste(x$num, "by", x$cat), Groups = "N/A", F_value = "N/A", P_value = "N/A", Result = x$error, check.names = FALSE)
+            } else {
+              data.frame(
+                Comparison = paste(x$num, "by", x$cat),
+                Groups = x$groups,
+                F_value = fmt_value(x$f_value),
+                P_value = format.pval(x$p, digits = 4),
+                Result = p_label(x$p),
+                check.names = FALSE
+              )
+            }
+          }))
+          sections[[length(sections) + 1]] <- tags$div(
+            class = "va-summary",
+            va_interpretation(
+              "Numeric outcome by category",
+              "One-way ANOVA compares group means. H0: all group means are equal. A small p-value suggests at least one group mean differs; it does not identify which groups differ or prove assumptions such as normal residuals and equal variances.",
+              pills = tagList(
+                va_pill(paste(length(anova_results), "ANOVA comparison(s)"), "neutral", "chart-bar"),
+                va_pill("p < 0.05: group means differ", "ok", "check-circle")
+              )
+            ),
+            va_table(anova_df),
+            va_details(
+              "Technical details: ANOVA outputs",
+              unlist(lapply(anova_results, function(x) {
+                if (!is.null(x$error)) {
+                  return(c(paste(x$num, "by", x$cat), paste("Error:", x$error), ""))
+                }
+                c(paste(x$num, "by", x$cat), x$technical, "")
+              }))
+            )
+          )
+        }
+
+        if (length(sections) == 1) {
+          sections[[length(sections) + 1]] <- tags$div(
+            class = "va-empty",
+            "No statistical block was available for the selected combination. Choose at least two numeric variables, two categorical variables, or a mix of numeric and categorical variables."
+          )
+        }
+
+        tags$div(class = "va-summary", sections)
       })
 
       output$twoVarPlot <- renderPlot({
-        if (length(num_vars) >= 3) {
-          pairs(df_sel[, num_vars, drop = FALSE],
-            main = "Scatter Plot Matrix (Numerical Variables)",
-            pch = 19, col = rgb(0.2, 0.5, 0.8, 0.5), cex = 0.7
+        if (length(num_vars) >= 2 && length(cat_vars) >= 1) {
+          complete_rows <- complete.cases(df_sel[, c(num_vars[1:2], cat_vars[1]), drop = FALSE])
+          if (sum(complete_rows) < 2) {
+            plot.new()
+            text(0.5, 0.5, "Not enough complete rows for this scatter plot.", cex = 1.1)
+            return()
+          }
+          plot_df <- data.frame(
+            x = df_sel[[num_vars[1]]][complete_rows],
+            y = df_sel[[num_vars[2]]][complete_rows],
+            group = as.factor(df_sel[[cat_vars[1]]][complete_rows])
           )
+          ggplot2::ggplot(plot_df, ggplot2::aes(x = x, y = y, color = group)) +
+            ggplot2::geom_point(alpha = 0.72, size = 2.5) +
+            ggplot2::geom_smooth(method = "lm", se = FALSE, linewidth = 0.8, alpha = 0.6) +
+            ggplot2::scale_color_manual(values = va_palette(length(levels(plot_df$group)), "Set2")) +
+            ggplot2::labs(
+              title = paste(num_vars[1], "vs", num_vars[2]),
+              subtitle = paste("Colored by", cat_vars[1], "- lines show within-group linear trends"),
+              x = num_vars[1],
+              y = num_vars[2],
+              color = cat_vars[1]
+            ) +
+            va_plot_theme()
+        } else if (length(num_vars) >= 3) {
+          complete_numeric <- df_sel[complete.cases(df_sel[, num_vars, drop = FALSE]), num_vars, drop = FALSE]
+          if (nrow(complete_numeric) < 2) {
+            plot.new()
+            text(0.5, 0.5, "Not enough complete numeric rows for a correlation heatmap.", cex = 1.1)
+            return()
+          }
+          cm <- cor(complete_numeric, use = "complete.obs")
+          heat_df <- as.data.frame(as.table(cm))
+          names(heat_df) <- c("Variable_1", "Variable_2", "Correlation")
+          ggplot2::ggplot(heat_df, ggplot2::aes(x = Variable_2, y = Variable_1, fill = Correlation)) +
+            ggplot2::geom_tile(color = "#0f172a", linewidth = 0.5) +
+            ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", Correlation)), color = "#f8fafc", size = 3.5) +
+            ggplot2::scale_fill_gradient2(low = "#ef4444", mid = "#1e293b", high = "#22c55e", midpoint = 0, limits = c(-1, 1)) +
+            ggplot2::labs(
+              title = "Correlation heatmap",
+              subtitle = "Green = positive linear association, red = negative linear association",
+              x = NULL,
+              y = NULL,
+              fill = "r"
+            ) +
+            va_plot_theme() +
+            ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 35, hjust = 1))
         } else if (length(num_vars) == 2) {
           x <- df_sel[[num_vars[1]]]
           y <- df_sel[[num_vars[2]]]
-          plot(x, y,
-            main = paste(num_vars[1], "vs", num_vars[2]),
-            xlab = num_vars[1], ylab = num_vars[2],
-            pch = 19, col = rgb(0.2, 0.5, 0.8, 0.5)
-          )
-          abline(lm(y ~ x), col = "red", lwd = 2)
-        } else if (length(num_vars) == 1 && length(cat_vars) >= 1) {
-          g <- as.factor(df_sel[[cat_vars[1]]])
-          boxplot(df_sel[[num_vars[1]]] ~ g,
-            main = paste(num_vars[1], "by", cat_vars[1]),
-            xlab = cat_vars[1], ylab = num_vars[1],
-            col = brewer.pal(min(length(levels(g)), 8), "Set2"),
-            las = 2
-          )
-        } else if (length(cat_vars) >= 2) {
-          t12 <- table(df_sel[[cat_vars[1]]], df_sel[[cat_vars[2]]])
-          barplot(t12,
-            main = paste(cat_vars[1], "vs", cat_vars[2]),
-            xlab = cat_vars[2], ylab = "Frequency",
-            col = brewer.pal(min(nrow(t12), 8), "Set3"),
-            beside = TRUE, legend.text = TRUE
-          )
+          complete_rows <- complete.cases(x, y)
+          if (sum(complete_rows) < 2) {
+            plot.new()
+            text(0.5, 0.5, "Not enough complete rows for this scatter plot.", cex = 1.1)
+            return()
+          }
+          plot_df <- data.frame(x = x[complete_rows], y = y[complete_rows])
+          r_val <- suppressWarnings(cor(plot_df$x, plot_df$y))
+          ggplot2::ggplot(plot_df, ggplot2::aes(x = x, y = y)) +
+            ggplot2::geom_point(color = "#38bdf8", alpha = 0.72, size = 2.6) +
+            ggplot2::geom_smooth(method = "lm", se = TRUE, color = "#22c55e", fill = "#22c55e", alpha = 0.16, linewidth = 1) +
+            ggplot2::labs(
+              title = paste(num_vars[1], "vs", num_vars[2]),
+              subtitle = paste("Linear trend with 95% confidence band; correlation r =", fmt_value(r_val, 3)),
+              x = num_vars[1],
+              y = num_vars[2]
+            ) +
+            va_plot_theme()
+        } else if (length(num_vars) == 1 && length(cat_vars) >= 2) {
+          plot_df <- data.frame(y = df_sel[[num_vars[1]]], df_sel[, cat_vars[1:2], drop = FALSE])
+          plot_df <- plot_df[complete.cases(plot_df), , drop = FALSE]
+          if (nrow(plot_df) < 2) {
+            plot.new()
+            text(0.5, 0.5, "Not enough complete rows for this grouped boxplot.", cex = 1.1)
+            return()
+          }
+          g <- interaction(plot_df[, cat_vars[1:2], drop = FALSE], drop = TRUE)
+          plot_df$group <- stats::reorder(g, plot_df$y, median, na.rm = TRUE)
+          ggplot2::ggplot(plot_df, ggplot2::aes(x = group, y = y)) +
+            ggplot2::geom_boxplot(fill = "#2563eb", color = "#dbeafe", alpha = 0.65, outlier.color = "#f97316") +
+            ggplot2::geom_jitter(width = 0.15, alpha = 0.35, color = "#93c5fd", size = 1.7) +
+            ggplot2::coord_flip() +
+            ggplot2::labs(
+              title = paste(num_vars[1], "by", paste(cat_vars[1:2], collapse = " + ")),
+              subtitle = "Groups are ordered by median; points show individual observations",
+              x = paste(cat_vars[1:2], collapse = " + "),
+              y = num_vars[1]
+            ) +
+            va_plot_theme()
+        } else if (length(num_vars) == 1 && length(cat_vars) == 1) {
+          plot_df <- data.frame(y = df_sel[[num_vars[1]]], g = as.factor(df_sel[[cat_vars[1]]]))
+          plot_df <- plot_df[complete.cases(plot_df), , drop = FALSE]
+          if (nrow(plot_df) < 2) {
+            plot.new()
+            text(0.5, 0.5, "Not enough complete rows for this grouped boxplot.", cex = 1.1)
+            return()
+          }
+          plot_df$g <- stats::reorder(plot_df$g, plot_df$y, median, na.rm = TRUE)
+          ggplot2::ggplot(plot_df, ggplot2::aes(x = g, y = y, fill = g)) +
+            ggplot2::geom_boxplot(alpha = 0.62, outlier.color = "#f97316") +
+            ggplot2::geom_jitter(width = 0.16, alpha = 0.35, color = "#dbeafe", size = 1.8) +
+            ggplot2::scale_fill_manual(values = va_palette(length(levels(plot_df$g)), "Set2")) +
+            ggplot2::coord_flip() +
+            ggplot2::labs(
+              title = paste(num_vars[1], "by", cat_vars[1]),
+              subtitle = "Groups are ordered by median; points reveal sample size and spread",
+              x = cat_vars[1],
+              y = num_vars[1],
+              fill = cat_vars[1]
+            ) +
+            va_plot_theme() +
+            ggplot2::theme(legend.position = "none")
+        } else if (length(cat_vars) >= 3) {
+          plot_df <- df_sel[complete.cases(df_sel[, cat_vars[1:3], drop = FALSE]), cat_vars[1:3], drop = FALSE]
+          if (nrow(plot_df) < 2) {
+            plot.new()
+            text(0.5, 0.5, "Not enough complete rows for this mosaic plot.", cex = 1.1)
+            return()
+          }
+          count_df <- as.data.frame(table(plot_df))
+          names(count_df) <- c("Var1", "Var2", "Var3", "Freq")
+          ggplot2::ggplot(count_df, ggplot2::aes(x = Var2, y = Var1, fill = Freq)) +
+            ggplot2::geom_tile(color = "#0f172a", linewidth = 0.45) +
+            ggplot2::geom_text(ggplot2::aes(label = ifelse(Freq > 0, Freq, "")), color = "#f8fafc", size = 3) +
+            ggplot2::facet_wrap(~Var3) +
+            ggplot2::scale_fill_gradient(low = "#111c30", high = "#38bdf8") +
+            ggplot2::labs(
+              title = paste("Count heatmap:", cat_vars[1], "by", cat_vars[2]),
+              subtitle = paste("Faceted by", cat_vars[3]),
+              x = cat_vars[2],
+              y = cat_vars[1],
+              fill = "Count"
+            ) +
+            va_plot_theme() +
+            ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 35, hjust = 1))
+        } else if (length(cat_vars) == 2) {
+          plot_df <- df_sel[complete.cases(df_sel[, cat_vars[1:2], drop = FALSE]), cat_vars[1:2], drop = FALSE]
+          if (nrow(plot_df) < 2) {
+            plot.new()
+            text(0.5, 0.5, "Not enough complete rows for this mosaic plot.", cex = 1.1)
+            return()
+          }
+          count_df <- as.data.frame(table(plot_df[[cat_vars[1]]], plot_df[[cat_vars[2]]]))
+          names(count_df) <- c("Var1", "Var2", "Freq")
+          ggplot2::ggplot(count_df, ggplot2::aes(x = Var2, y = Var1, fill = Freq)) +
+            ggplot2::geom_tile(color = "#0f172a", linewidth = 0.5) +
+            ggplot2::geom_text(ggplot2::aes(label = ifelse(Freq > 0, Freq, "")), color = "#f8fafc", size = 3.5) +
+            ggplot2::scale_fill_gradient(low = "#111c30", high = "#38bdf8") +
+            ggplot2::labs(
+              title = paste("Count heatmap:", cat_vars[1], "vs", cat_vars[2]),
+              subtitle = "Darker cells have fewer observations; brighter cells have more",
+              x = cat_vars[2],
+              y = cat_vars[1],
+              fill = "Count"
+            ) +
+            va_plot_theme() +
+            ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 35, hjust = 1))
         } else {
           plot.new()
           text(0.5, 0.5, "Not enough valid variables selected for plotting.", cex = 1.1)
@@ -4599,11 +5411,45 @@ server <- function(input, output, session) {
       })
       if (HAS_PLOTLY) {
         output$twoVarPlotly <- plotly::renderPlotly({
-          if (length(num_vars) >= 2) {
+          if (length(num_vars) >= 2 && length(cat_vars) >= 1) {
+            complete_rows <- complete.cases(df_sel[, c(num_vars[1:2], cat_vars[1]), drop = FALSE])
+            req(sum(complete_rows) >= 2)
+            plotly::plot_ly(
+              x = df_sel[[num_vars[1]]][complete_rows],
+              y = df_sel[[num_vars[2]]][complete_rows],
+              color = as.factor(df_sel[[cat_vars[1]]][complete_rows]),
+              type = "scatter", mode = "markers",
+              marker = list(opacity = 0.7)
+            ) |>
+              plotly::layout(
+                title = paste(num_vars[1], "vs", num_vars[2], "colored by", cat_vars[1]),
+                xaxis = list(title = num_vars[1]),
+                yaxis = list(title = num_vars[2])
+              )
+          } else if (length(num_vars) >= 3) {
+            complete_numeric <- df_sel[complete.cases(df_sel[, num_vars, drop = FALSE]), num_vars, drop = FALSE]
+            req(nrow(complete_numeric) >= 2)
+            cm <- cor(complete_numeric, use = "complete.obs")
+            plotly::plot_ly(
+              x = colnames(cm), y = rownames(cm), z = cm,
+              type = "heatmap",
+              colors = c("#ef4444", "#1e293b", "#22c55e"),
+              zmin = -1, zmax = 1,
+              text = round(cm, 3),
+              hovertemplate = "x: %{x}<br>y: %{y}<br>r: %{z:.3f}<extra></extra>"
+            ) |>
+              plotly::layout(
+                title = "Correlation heatmap",
+                xaxis = list(title = ""),
+                yaxis = list(title = "")
+              )
+          } else if (length(num_vars) >= 2) {
             x <- df_sel[[num_vars[1]]]
             y <- df_sel[[num_vars[2]]]
+            complete_rows <- complete.cases(x, y)
+            req(sum(complete_rows) >= 2)
             plotly::plot_ly(
-              x = x, y = y, type = "scatter", mode = "markers",
+              x = x[complete_rows], y = y[complete_rows], type = "scatter", mode = "markers",
               marker = list(color = "#3b82f6", opacity = 0.65)
             ) |>
               plotly::layout(
@@ -4611,70 +5457,52 @@ server <- function(input, output, session) {
                 xaxis = list(title = num_vars[1]),
                 yaxis = list(title = num_vars[2])
               )
-          } else if (length(num_vars) == 1 && length(cat_vars) >= 1) {
+          } else if (length(num_vars) == 1 && length(cat_vars) >= 2) {
+            plot_df <- data.frame(y = df_sel[[num_vars[1]]], df_sel[, cat_vars[1:2], drop = FALSE])
+            plot_df <- plot_df[complete.cases(plot_df), , drop = FALSE]
+            req(nrow(plot_df) >= 2)
             plotly::plot_ly(
-              x = as.factor(df_sel[[cat_vars[1]]]),
-              y = df_sel[[num_vars[1]]], type = "box"
+              x = interaction(plot_df[, cat_vars[1:2], drop = FALSE], drop = TRUE),
+              y = plot_df$y, type = "box", boxpoints = "all", jitter = 0.25,
+              marker = list(color = "#38bdf8", opacity = 0.45),
+              line = list(color = "#dbeafe")
+            ) |>
+              plotly::layout(
+                title = paste(num_vars[1], "by", paste(cat_vars[1:2], collapse = " + ")),
+                xaxis = list(title = paste(cat_vars[1:2], collapse = " + ")),
+                yaxis = list(title = num_vars[1])
+              )
+          } else if (length(num_vars) == 1 && length(cat_vars) == 1) {
+            plot_df <- data.frame(y = df_sel[[num_vars[1]]], g = as.factor(df_sel[[cat_vars[1]]]))
+            plot_df <- plot_df[complete.cases(plot_df), , drop = FALSE]
+            req(nrow(plot_df) >= 2)
+            plotly::plot_ly(
+              x = plot_df$g,
+              y = plot_df$y, type = "box", boxpoints = "all", jitter = 0.25,
+              marker = list(color = "#38bdf8", opacity = 0.45),
+              line = list(color = "#dbeafe")
             )
           } else if (length(cat_vars) >= 2) {
-            t12 <- as.data.frame(table(df_sel[[cat_vars[1]]], df_sel[[cat_vars[2]]]))
-            names(t12) <- c("Var1", "Var2", "Freq")
-            plotly::plot_ly(t12, x = ~Var2, y = ~Freq, color = ~Var1, type = "bar")
+            plot_df <- df_sel[complete.cases(df_sel[, cat_vars[1:2], drop = FALSE]), cat_vars[1:2], drop = FALSE]
+            req(nrow(plot_df) >= 2)
+            t12 <- table(plot_df[[cat_vars[1]]], plot_df[[cat_vars[2]]])
+            plotly::plot_ly(
+              x = colnames(t12), y = rownames(t12), z = unclass(t12),
+              type = "heatmap",
+              colors = c("#111c30", "#38bdf8"),
+              hovertemplate = paste(cat_vars[2], ": %{x}<br>", cat_vars[1], ": %{y}<br>Count: %{z}<extra></extra>")
+            ) |>
+              plotly::layout(
+                title = paste("Count heatmap:", cat_vars[1], "vs", cat_vars[2]),
+                xaxis = list(title = cat_vars[2]),
+                yaxis = list(title = cat_vars[1])
+              )
           } else {
             plotly::plot_ly()
           }
         })
       }
       incProgress(0.40)
-    })
-  })
-
-  # ===== CORRELATION MATRIX =====
-
-  output$corrVarsSelect <- renderUI({
-    req(data$numeric_vars)
-    selectInput("corrVars", "Select Variables (multiple):",
-      choices = data$numeric_vars,
-      multiple = TRUE,
-      selected = data$numeric_vars[1:min(3, length(data$numeric_vars))]
-    )
-  })
-
-  observeEvent(input$runCorrAnalysis, {
-    req(data$raw, input$corrVars)
-    withProgress(message = "Computing correlation outputs...", value = 0, {
-      selected_data <- data$raw[, input$corrVars, drop = FALSE]
-      corr_matrix <- cor(selected_data, use = "complete.obs")
-      incProgress(0.4)
-
-      output$corrMatrix <- renderPrint({
-        cat("Correlation Matrix\n")
-        cat(strrep("=", 40), "\n\n")
-        print(round(corr_matrix, 3))
-      })
-
-      output$corrHeatmap <- renderPlot({
-        corrplot(corr_matrix,
-          method = "circle",
-          addCoef.col = "black",
-          type = "upper",
-          diag = FALSE,
-          col = COL2("RdYlBu", n = 20),
-          tl.cex = 0.9,
-          tl.col = "black",
-          number.cex = 0.8
-        )
-      })
-
-      output$corrPairs <- renderPlot({
-        pairs(selected_data,
-          main = "Scatter Plot Matrix",
-          pch = 19,
-          col = rgb(0.2, 0.5, 0.8, 0.4),
-          cex = 0.6
-        )
-      })
-      incProgress(0.6)
     })
   })
 
@@ -4690,77 +5518,112 @@ server <- function(input, output, session) {
   observeEvent(input$runCatAnalysis, {
     req(data$raw, input$catVar)
 
-    cat_data <- data$raw[[input$catVar]]
-    freq_table <- table(cat_data)
+    cat_data <- clean_cat_vector(data$raw[[input$catVar]])
+    freq_table <- table(cat_data, useNA = "no")
     prop_table <- prop.table(freq_table)
+    missing_n <- sum(is.na(cat_data))
+    total_n <- length(cat_data)
+    freq_df <- cat_count_df(cat_data)
 
-    output$catFrequency <- renderTable(
-      {
-        data.frame(
-          Category = names(freq_table),
-          Frequency = as.numeric(freq_table)
-        )
-      },
-      rownames = FALSE
-    )
+    output$catFrequency <- renderUI({
+      if (length(freq_table) == 0) {
+        return(tags$div(class = "va-empty", "No non-missing categories are available for this variable."))
+      }
+      mode_name <- names(which.max(freq_table))
+      mode_count <- max(freq_table)
+      mode_share <- mode_count / sum(freq_table)
+      concentration_status <- if (mode_share >= 0.75) "warn" else "ok"
 
-    output$catProportion <- renderTable(
-      {
-        data.frame(
-          Category = names(prop_table),
-          Proportion = round(as.numeric(prop_table), 4),
-          Percentage = paste0(round(as.numeric(prop_table) * 100, 2), "%")
-        )
-      },
-      rownames = FALSE
-    )
-
-    output$catPlot <- renderPlot({
-      if (input$catPlotType == "Bar Plot") {
-        par(mfrow = c(1, 1))
-        barplot(freq_table,
-          main = paste("Bar Plot of", input$catVar),
-          xlab = input$catVar,
-          ylab = "Frequency",
-          col = brewer.pal(min(length(freq_table), 8), "Set2"),
-          las = 2
-        )
-      } else if (input$catPlotType == "Pie Chart") {
-        par(mfrow = c(1, 1))
-        pie(freq_table,
-          main = paste("Pie Chart of", input$catVar),
-          col = brewer.pal(min(length(freq_table), 8), "Pastel1"),
-          labels = paste(names(freq_table), "\n(",
-            round(prop_table * 100, 1), "%)",
-            sep = ""
+      return(tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Non-missing rows", format(sum(freq_table), big.mark = ","), paste("Out of", format(total_n, big.mark = ",")), "ok"),
+          va_metric("Missing / blank", format(missing_n, big.mark = ","), "Excluded from percentages", ifelse(missing_n == 0, "ok", "warn")),
+          va_metric("Distinct levels", length(freq_table), "Categories observed", "neutral"),
+          va_metric("Most common level", mode_name, paste0(mode_count, " rows (", round(100 * mode_share, 1), "%)"), concentration_status)
+        ),
+        va_interpretation(
+          paste("Categorical profile for", input$catVar),
+          if (mode_share >= 0.75) {
+            "One category dominates this variable. Analyses involving rare categories may be unstable or hard to interpret."
+          } else {
+            "The variable has a usable spread across categories. Review the bar chart for small groups before comparing categories."
+          },
+          pills = tagList(
+            va_pill(paste("Top share:", paste0(round(100 * mode_share, 1), "%")), concentration_status, ifelse(concentration_status == "ok", "check-circle", "exclamation-triangle")),
+            va_pill(paste("Levels:", length(freq_table)), "neutral", "tags")
           )
         )
-      } else {
-        par(mfrow = c(2, 1), mar = c(5, 4, 3, 2))
-        barplot(freq_table,
-          main = paste("Bar Plot of", input$catVar),
-          xlab = input$catVar,
-          ylab = "Frequency",
-          col = brewer.pal(min(length(freq_table), 8), "Set2"),
-          las = 2
-        )
-        pie(freq_table,
-          main = paste("Pie Chart of", input$catVar),
-          col = brewer.pal(min(length(freq_table), 8), "Pastel1")
-        )
+      ))
+    })
+
+    output$catProportion <- renderUI({
+      if (length(freq_table) == 0) {
+        return(NULL)
       }
+      display_df <- freq_df[, c("Category", "Count", "Percent"), drop = FALSE]
+      tagList(
+        tags$h5("Frequency and Share"),
+        va_table(display_df),
+        va_details(
+          "Technical details: full frequency/proportion table",
+          c(
+            paste("Variable:", input$catVar),
+            "Frequency table:",
+            capture.output(print(freq_table)),
+            "",
+            "Proportion table:",
+            capture.output(print(round(prop_table, 4)))
+          )
+        )
+      )
+    })
+
+    output$catPlot <- renderPlot({
+      req(nrow(freq_df) > 0)
+      plot_df <- cat_count_df(cat_data, max_levels = 18)
+      plot_df$Category <- factor(plot_df$Category, levels = rev(plot_df$Category))
+      y_var <- if (identical(input$catPlotType, "Share Bar")) "Share" else "Count"
+      y_lab <- if (identical(input$catPlotType, "Share Bar")) "Share of non-missing rows" else "Count"
+      ggplot2::ggplot(plot_df, ggplot2::aes(x = Category, y = .data[[y_var]], fill = Share)) +
+        ggplot2::geom_col(width = 0.72) +
+        ggplot2::geom_text(
+          ggplot2::aes(label = if (identical(input$catPlotType, "Share Bar")) Percent else Count),
+          hjust = -0.1, color = "#e5e7eb", size = 3.6
+        ) +
+        ggplot2::coord_flip(clip = "off") +
+        ggplot2::scale_fill_gradient(low = "#2563eb", high = "#22c55e", labels = function(x) paste0(round(100 * x), "%")) +
+        ggplot2::labs(
+          title = paste("Category distribution:", input$catVar),
+          subtitle = "Sorted by frequency; low-frequency levels may be combined into 'Other levels'",
+          x = NULL,
+          y = y_lab,
+          fill = "Share"
+        ) +
+        va_plot_theme() +
+        ggplot2::theme(plot.margin = ggplot2::margin(10, 50, 10, 10))
     })
     if (HAS_PLOTLY) {
       output$catPlotly <- plotly::renderPlotly({
-        dfp <- data.frame(Category = names(freq_table), Frequency = as.numeric(freq_table))
-        if (input$catPlotType == "Pie Chart") {
-          plotly::plot_ly(dfp, labels = ~Category, values = ~Frequency, type = "pie")
-        } else {
-          plotly::plot_ly(dfp,
-            x = ~Category, y = ~Frequency, type = "bar",
-            marker = list(color = "#60a5fa")
+        req(nrow(freq_df) > 0)
+        dfp <- cat_count_df(cat_data, max_levels = 18)
+        y <- if (identical(input$catPlotType, "Share Bar")) dfp$Share else dfp$Count
+        plotly::plot_ly(
+          dfp,
+          x = y,
+          y = ~reorder(Category, Count),
+          type = "bar",
+          orientation = "h",
+          text = if (identical(input$catPlotType, "Share Bar")) ~Percent else ~Count,
+          textposition = "outside",
+          marker = list(color = "#38bdf8")
+        ) |>
+          plotly::layout(
+            title = paste("Category distribution:", input$catVar),
+            xaxis = list(title = if (identical(input$catPlotType, "Share Bar")) "Share" else "Count"),
+            yaxis = list(title = "")
           )
-        }
       })
     }
   })
@@ -4784,58 +5647,155 @@ server <- function(input, output, session) {
   observeEvent(input$runCrosstabAnalysis, {
     req(data$raw, input$crosstabVar1, input$crosstabVar2)
 
-    var1_data <- data$raw[[input$crosstabVar1]]
-    var2_data <- data$raw[[input$crosstabVar2]]
+    var1_data <- clean_cat_vector(data$raw[[input$crosstabVar1]])
+    var2_data <- clean_cat_vector(data$raw[[input$crosstabVar2]])
+    complete_idx <- complete.cases(var1_data, var2_data)
 
-    cont_table <- table(var1_data, var2_data)
+    cont_table <- table(var1_data[complete_idx], var2_data[complete_idx])
     joint_prop <- prop.table(cont_table)
+    row_prop <- prop.table(cont_table, 1)
+    chi_test <- tryCatch(suppressWarnings(chisq.test(cont_table)), error = function(e) NULL)
+    cramers_v <- if (!is.null(chi_test) && min(dim(cont_table)) > 1) {
+      sqrt(unname(chi_test$statistic) / (sum(cont_table) * (min(dim(cont_table)) - 1)))
+    } else {
+      NA_real_
+    }
 
-    output$crosstabTable <- renderTable(
-      {
-        as.data.frame.matrix(cont_table)
-      },
-      rownames = TRUE
-    )
+    output$crosstabTable <- renderUI({
+      if (sum(cont_table) == 0) {
+        return(tags$div(class = "va-empty", "No complete rows are available for this cross-tabulation."))
+      }
+      return(tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Complete rows", format(sum(cont_table), big.mark = ","), paste("Missing in either variable:", format(sum(!complete_idx), big.mark = ",")), ifelse(sum(!complete_idx) == 0, "ok", "warn")),
+          va_metric("Row levels", nrow(cont_table), input$crosstabVar1, "neutral"),
+          va_metric("Column levels", ncol(cont_table), input$crosstabVar2, "neutral"),
+          va_metric("Largest cell", max(cont_table), "Highest observed combination", "neutral")
+        ),
+        va_interpretation(
+          paste(input$crosstabVar1, "by", input$crosstabVar2),
+          "The contingency table shows how often each combination of the two categories occurs. Use the heatmap below to quickly spot concentrations or sparse cells.",
+          pills = tagList(
+            va_pill("Counts", "neutral", "table"),
+            va_pill("Missing rows excluded", ifelse(sum(!complete_idx) == 0, "ok", "warn"), ifelse(sum(!complete_idx) == 0, "check-circle", "exclamation-triangle"))
+          )
+        ),
+        va_table(cbind(data.frame(Level = rownames(cont_table), check.names = FALSE), as.data.frame.matrix(cont_table)))
+      ))
+    })
 
-    output$crosstabProp <- renderTable(
-      {
-        as.data.frame.matrix(round(joint_prop, 4))
-      },
-      rownames = TRUE
-    )
+    output$crosstabProp <- renderUI({
+      if (sum(cont_table) == 0) {
+        return(NULL)
+      }
+      prop_df <- cbind(data.frame(Level = rownames(cont_table), check.names = FALSE), as.data.frame.matrix(round(joint_prop, 4)))
+      row_df <- cbind(data.frame(Level = rownames(cont_table), check.names = FALSE), as.data.frame.matrix(round(row_prop, 4)))
+      tagList(
+        va_interpretation(
+          "Proportions",
+          "Joint proportions show each cell's share of all complete rows. Row proportions show the distribution within each row level, which is often easier to interpret for comparisons.",
+          pills = tagList(
+            va_pill("Joint proportions", "neutral", "percentage"),
+            va_pill("Row proportions", "neutral", "layer-group")
+          )
+        ),
+        tags$h5("Joint Proportions"),
+        va_table(prop_df),
+        tags$br(),
+        tags$h5("Row Proportions"),
+        va_table(row_df)
+      )
+    })
 
-    output$chiSquareTest <- renderPrint({
-      chi_test <- chisq.test(cont_table)
-      cat("Chi-Square Test of Independence\n")
-      cat(strrep("=", 40), "\n\n")
-      print(chi_test)
+    output$chiSquareTest <- renderUI({
+      if (is.null(chi_test)) {
+        return(tags$div(class = "va-empty", "Chi-square test could not be computed. This usually happens when a variable has too few observed levels."))
+      }
+      expected_warning <- any(chi_test$expected < 5)
+      status <- p_status(chi_test$p.value)
+      return(tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("p-value", format.pval(chi_test$p.value, digits = 4), "H0: variables are independent", status),
+          va_metric("Chi-square", fmt_value(unname(chi_test$statistic)), paste("df =", fmt_value(unname(chi_test$parameter), 0)), "neutral"),
+          va_metric("Cramer's V", fmt_value(cramers_v, 3), cramers_label(cramers_v), cramers_status(cramers_v)),
+          va_metric("Expected counts", ifelse(expected_warning, "Sparse cells", "Adequate"), "Rule of thumb: expected counts should mostly be >= 5", ifelse(expected_warning, "warn", "ok"))
+        ),
+        va_interpretation(
+          "Chi-square test of independence",
+          paste(
+            p_label(chi_test$p.value),
+            "A small p-value suggests the two categorical variables are associated. Cramer's V describes practical association strength; it is not a causal measure."
+          ),
+          pills = tagList(
+            va_pill("p < 0.05: evidence of association", "ok", "check-circle"),
+            va_pill(ifelse(expected_warning, "Expected-count warning", "Expected counts OK"), ifelse(expected_warning, "warn", "ok"), ifelse(expected_warning, "exclamation-triangle", "check-circle"))
+          )
+        ),
+        va_details(
+          "Technical details: chi-square output",
+          c(
+            capture.output(print(chi_test)),
+            "",
+            paste("Cramer's V:", fmt_value(cramers_v, 4)),
+            paste("Any expected count < 5:", ifelse(expected_warning, "Yes", "No"))
+          )
+        )
+      ))
 
       cat("\n\nCramér's V:\n")
-      cramers_v <- sqrt(chi_test$statistic / (sum(cont_table) * (min(dim(cont_table)) - 1)))
-      cat(sprintf("%.4f\n", cramers_v))
     })
 
     output$crosstabPlot <- renderPlot({
-      if (input$crosstabPlotType == "Stacked Bar") {
-        barplot(cont_table,
-          main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
-          xlab = input$crosstabVar2,
-          col = brewer.pal(min(nrow(cont_table), 8), "Set3"),
-          legend.text = TRUE
-        )
-      } else if (input$crosstabPlotType == "Grouped Bar") {
-        barplot(cont_table,
-          main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
-          xlab = input$crosstabVar2,
-          col = brewer.pal(min(nrow(cont_table), 8), "Set3"),
-          beside = TRUE,
-          legend.text = TRUE
-        )
+      req(sum(cont_table) > 0)
+      plot_df <- as.data.frame(cont_table)
+      names(plot_df) <- c("Row", "Column", "Count")
+      plot_df$ColumnShare <- ave(plot_df$Count, plot_df$Column, FUN = function(x) x / sum(x))
+
+      if (input$crosstabPlotType == "Stacked Share Bar") {
+        ggplot2::ggplot(plot_df, ggplot2::aes(x = Column, y = ColumnShare, fill = Row)) +
+          ggplot2::geom_col(position = "stack", width = 0.72) +
+          ggplot2::scale_y_continuous(labels = function(x) paste0(round(100 * x), "%")) +
+          ggplot2::scale_fill_manual(values = va_palette(length(unique(plot_df$Row)), "Set2")) +
+          ggplot2::labs(
+            title = paste("Composition of", input$crosstabVar1, "within", input$crosstabVar2),
+            subtitle = "Each bar sums to 100%; useful for comparing category mix",
+            x = input$crosstabVar2,
+            y = "Share within column",
+            fill = input$crosstabVar1
+          ) +
+          va_plot_theme() +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+      } else if (input$crosstabPlotType == "Grouped Count Bar") {
+        ggplot2::ggplot(plot_df, ggplot2::aes(x = Column, y = Count, fill = Row)) +
+          ggplot2::geom_col(position = ggplot2::position_dodge(width = 0.78), width = 0.68) +
+          ggplot2::scale_fill_manual(values = va_palette(length(unique(plot_df$Row)), "Set2")) +
+          ggplot2::labs(
+            title = paste("Grouped counts:", input$crosstabVar1, "vs", input$crosstabVar2),
+            subtitle = "Side-by-side bars emphasize absolute frequency differences",
+            x = input$crosstabVar2,
+            y = "Count",
+            fill = input$crosstabVar1
+          ) +
+          va_plot_theme() +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
       } else {
-        mosaicplot(cont_table,
-          main = paste(input$crosstabVar1, "vs", input$crosstabVar2),
-          color = brewer.pal(min(ncol(cont_table), 8), "Set2")
-        )
+        ggplot2::ggplot(plot_df, ggplot2::aes(x = Column, y = Row, fill = Count)) +
+          ggplot2::geom_tile(color = "#0f172a", linewidth = 0.5) +
+          ggplot2::geom_text(ggplot2::aes(label = ifelse(Count > 0, Count, "")), color = "#f8fafc", size = 3.8) +
+          ggplot2::scale_fill_gradient(low = "#111c30", high = "#38bdf8") +
+          ggplot2::labs(
+            title = paste("Count heatmap:", input$crosstabVar1, "vs", input$crosstabVar2),
+            subtitle = "Brighter cells have more observations",
+            x = input$crosstabVar2,
+            y = input$crosstabVar1,
+            fill = "Count"
+          ) +
+          va_plot_theme() +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
       }
     })
   })
@@ -4898,25 +5858,71 @@ server <- function(input, output, session) {
     multi_table <- table(multi_data)
 
     # Multi-way contingency table output
-    output$multiCatTable <- renderPrint({
-      cat("Multi-Way Contingency Table\n")
-      cat(strrep("=", 60), "\n\n")
-      cat("Variables:", paste(selected_vars, collapse = ", "), "\n")
-      cat("Dimensions:", paste(dim(multi_table), collapse = " x "), "\n\n")
-      print(multi_table)
+    output$multiCatTable <- renderUI({
+      flat_table <- as.data.frame(multi_table)
+      flat_table <- flat_table[order(flat_table$Freq, decreasing = TRUE), , drop = FALSE]
+      observed_combos <- sum(flat_table$Freq > 0)
+      total_combos <- nrow(flat_table)
+      top_table <- head(flat_table[flat_table$Freq > 0, , drop = FALSE], 15)
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Variables", length(selected_vars), paste(selected_vars, collapse = ", "), "neutral"),
+          va_metric("Possible combinations", format(total_combos, big.mark = ","), paste("Dimensions:", paste(dim(multi_table), collapse = " x ")), "neutral"),
+          va_metric("Observed combinations", format(observed_combos, big.mark = ","), paste0(round(100 * observed_combos / max(1, total_combos), 1), "% non-empty"), ifelse(observed_combos / max(1, total_combos) < 0.35, "warn", "ok")),
+          va_metric("Total complete rows", format(sum(multi_table), big.mark = ","), "Rows used in the multi-way table", "ok")
+        ),
+        va_interpretation(
+          "Multi-way contingency table",
+          "This table summarizes the most common observed category combinations. Sparse combinations are common with 3+ categorical variables, so interpret rare patterns cautiously.",
+          pills = tagList(
+            va_pill("Top observed combinations shown", "neutral", "table"),
+            va_pill(ifelse(observed_combos / max(1, total_combos) < 0.35, "Sparse table", "Coverage OK"), ifelse(observed_combos / max(1, total_combos) < 0.35, "warn", "ok"), ifelse(observed_combos / max(1, total_combos) < 0.35, "exclamation-triangle", "check-circle"))
+          )
+        ),
+        va_table(top_table),
+        va_details(
+          "Technical details: full multi-way table",
+          c(
+            paste("Variables:", paste(selected_vars, collapse = ", ")),
+            paste("Dimensions:", paste(dim(multi_table), collapse = " x ")),
+            capture.output(print(multi_table))
+          )
+        )
+      )
     })
 
     # Conditional proportions
-    output$multiCatProportions <- renderPrint({
-      cat("Proportions (relative to total)\n")
-      cat(strrep("=", 60), "\n\n")
+    output$multiCatProportions <- renderUI({
       prop_table <- prop.table(multi_table)
-      print(round(prop_table, 4))
-
-      cat("\n\nConditional Proportions (by", selected_vars[1], ")\n")
-      cat(strrep("-", 60), "\n")
       cond_prop <- prop.table(multi_table, 1)
-      print(round(cond_prop, 4))
+      flat_prop <- as.data.frame(prop_table)
+      names(flat_prop)[ncol(flat_prop)] <- "Proportion"
+      flat_prop <- flat_prop[order(flat_prop$Proportion, decreasing = TRUE), , drop = FALSE]
+      flat_prop$Percent <- paste0(round(100 * flat_prop$Proportion, 2), "%")
+      flat_prop$Proportion <- round(flat_prop$Proportion, 4)
+      tagList(
+        va_interpretation(
+          "Proportions",
+          paste("Overall proportions are relative to all complete rows. Conditional proportions are calculated within", selected_vars[1], "and are available in technical details."),
+          pills = tagList(
+            va_pill("Overall proportions", "neutral", "percentage"),
+            va_pill(paste("Conditioned by", selected_vars[1]), "neutral", "layer-group")
+          )
+        ),
+        va_table(head(flat_prop, 15)),
+        va_details(
+          "Technical details: conditional proportions",
+          c(
+            "Proportions relative to total:",
+            capture.output(print(round(prop_table, 4))),
+            "",
+            paste("Conditional proportions by", selected_vars[1], ":"),
+            capture.output(print(round(cond_prop, 4)))
+          )
+        )
+      )
     })
 
     # Chi-square test
@@ -5018,6 +6024,118 @@ server <- function(input, output, session) {
           )
         }
       }
+    })
+
+    pairwise_results <- list()
+    for (i in 1:(length(selected_vars) - 1)) {
+      for (j in (i + 1):length(selected_vars)) {
+        test_table <- table(multi_data[[selected_vars[i]]], multi_data[[selected_vars[j]]])
+        res <- tryCatch(
+          {
+            chi_test <- suppressWarnings(chisq.test(test_table))
+            v <- if (min(dim(test_table)) > 1) {
+              sqrt(unname(chi_test$statistic) / (sum(test_table) * (min(dim(test_table)) - 1)))
+            } else {
+              NA_real_
+            }
+            list(
+              var1 = selected_vars[i], var2 = selected_vars[j],
+              statistic = unname(chi_test$statistic), df = unname(chi_test$parameter),
+              p = chi_test$p.value, v = v, low_expected = any(chi_test$expected < 5),
+              technical = capture.output(print(chi_test)), error = NULL
+            )
+          },
+          error = function(e) {
+            list(var1 = selected_vars[i], var2 = selected_vars[j], error = e$message)
+          }
+        )
+        pairwise_results[[length(pairwise_results) + 1]] <- res
+      }
+    }
+
+    output$multiCatChiSquare <- renderUI({
+      result_df <- do.call(rbind, lapply(pairwise_results, function(x) {
+        if (!is.null(x$error)) {
+          data.frame(Comparison = paste(x$var1, "vs", x$var2), P_value = "N/A", Result = x$error, Expected_Counts = "N/A", check.names = FALSE)
+        } else {
+          data.frame(
+            Comparison = paste(x$var1, "vs", x$var2),
+            P_value = format.pval(x$p, digits = 4),
+            Result = p_label(x$p),
+            Expected_Counts = ifelse(isTRUE(x$low_expected), "Warning", "OK"),
+            check.names = FALSE
+          )
+        }
+      }))
+      significant_n <- sum(vapply(pairwise_results, function(x) is.null(x$error) && !is.na(x$p) && x$p < 0.05, logical(1)))
+      warning_n <- sum(vapply(pairwise_results, function(x) is.null(x$error) && isTRUE(x$low_expected), logical(1)))
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Pairwise tests", length(pairwise_results), "All selected variable pairs", "neutral"),
+          va_metric("Significant pairs", significant_n, "p < 0.05", ifelse(significant_n > 0, "ok", "neutral")),
+          va_metric("Expected-count warnings", warning_n, "Sparse cells can weaken chi-square reliability", ifelse(warning_n > 0, "warn", "ok")),
+          va_metric("Decision rule", "p < 0.05", "Evidence against independence", "neutral")
+        ),
+        va_interpretation(
+          "Pairwise chi-square tests",
+          "For 3+ categorical variables, the app summarizes pairwise independence tests. A significant result means the two variables show evidence of association, but it does not describe all higher-order interactions.",
+          pills = tagList(
+            va_pill("H0: pair is independent", "neutral", "calculator"),
+            va_pill("Sparse tables need caution", ifelse(warning_n > 0, "warn", "ok"), ifelse(warning_n > 0, "exclamation-triangle", "check-circle"))
+          )
+        ),
+        va_table(result_df),
+        va_details(
+          "Technical details: chi-square outputs",
+          unlist(lapply(pairwise_results, function(x) {
+            if (!is.null(x$error)) {
+              return(c(paste(x$var1, "vs", x$var2), paste("Error:", x$error), ""))
+            }
+            c(
+              paste(x$var1, "vs", x$var2),
+              x$technical,
+              paste("Expected-count warning:", ifelse(isTRUE(x$low_expected), "Yes", "No")),
+              ""
+            )
+          }))
+        )
+      )
+    })
+
+    output$multiCatAssociation <- renderUI({
+      assoc_df <- do.call(rbind, lapply(pairwise_results, function(x) {
+        if (!is.null(x$error)) {
+          data.frame(Comparison = paste(x$var1, "vs", x$var2), Cramers_V = "N/A", Strength = "Unable to compute", check.names = FALSE)
+        } else {
+          data.frame(
+            Comparison = paste(x$var1, "vs", x$var2),
+            Cramers_V = fmt_value(x$v, 4),
+            Strength = cramers_label(x$v),
+            check.names = FALSE
+          )
+        }
+      }))
+      max_v <- suppressWarnings(max(vapply(pairwise_results, function(x) if (is.null(x$error)) x$v else NA_real_, numeric(1)), na.rm = TRUE))
+      if (!is.finite(max_v)) max_v <- NA_real_
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Strongest Cramer's V", fmt_value(max_v, 3), cramers_label(max_v), cramers_status(max_v)),
+          va_metric("Pairs evaluated", nrow(assoc_df), "Pairwise practical association", "neutral")
+        ),
+        va_interpretation(
+          "Association strength",
+          "Cramer's V ranges from 0 to 1. Larger values indicate stronger categorical association, but the scale is context-dependent and should be interpreted with sample size and table sparsity.",
+          pills = tagList(
+            va_pill("< 0.10 negligible", "ok", "check-circle"),
+            va_pill("0.30+ moderate/strong", "warn", "exclamation-triangle")
+          )
+        ),
+        va_table(assoc_df)
+      )
     })
 
     # Visualization options
@@ -5152,56 +6270,118 @@ server <- function(input, output, session) {
       }
     })
 
+    output$multiCatPlot <- renderPlot({
+      req(multi_table)
+      plot_data <- multi_data[complete.cases(multi_data[, selected_vars, drop = FALSE]), selected_vars, drop = FALSE]
+      if (nrow(plot_data) == 0) {
+        plot.new()
+        text(0.5, 0.5, "No complete rows are available for the selected categorical variables.", cex = 1.1)
+        return()
+      }
+
+      if (input$multiCatPlotType == "Stacked Share Bar") {
+        count_df <- as.data.frame(table(plot_data[[selected_vars[1]]], plot_data[[selected_vars[2]]]))
+        names(count_df) <- c("Group", "Category", "Count")
+        count_df$Share <- ave(count_df$Count, count_df$Category, FUN = function(x) x / sum(x))
+        ggplot2::ggplot(count_df, ggplot2::aes(x = Category, y = Share, fill = Group)) +
+          ggplot2::geom_col(width = 0.72) +
+          ggplot2::scale_y_continuous(labels = function(x) paste0(round(100 * x), "%")) +
+          ggplot2::scale_fill_manual(values = va_palette(length(unique(count_df$Group)), "Set2")) +
+          ggplot2::labs(
+            title = paste("Composition of", selected_vars[1], "within", selected_vars[2]),
+            subtitle = "Each bar sums to 100%",
+            x = selected_vars[2],
+            y = "Share",
+            fill = selected_vars[1]
+          ) +
+          va_plot_theme() +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+      } else if (input$multiCatPlotType == "Grouped Count Bar") {
+        count_df <- as.data.frame(table(plot_data[[selected_vars[1]]], plot_data[[selected_vars[2]]]))
+        names(count_df) <- c("Group", "Category", "Count")
+        ggplot2::ggplot(count_df, ggplot2::aes(x = Category, y = Count, fill = Group)) +
+          ggplot2::geom_col(position = ggplot2::position_dodge(width = 0.78), width = 0.68) +
+          ggplot2::scale_fill_manual(values = va_palette(length(unique(count_df$Group)), "Set2")) +
+          ggplot2::labs(
+            title = paste("Grouped counts:", selected_vars[1], "vs", selected_vars[2]),
+            subtitle = "First two selected variables are displayed",
+            x = selected_vars[2],
+            y = "Count",
+            fill = selected_vars[1]
+          ) +
+          va_plot_theme() +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+      } else if (input$multiCatPlotType == "Faceted Heatmap" && length(selected_vars) >= 3) {
+        count_df <- as.data.frame(table(plot_data[, selected_vars[1:3], drop = FALSE]))
+        names(count_df) <- c("Var1", "Var2", "Var3", "Count")
+        ggplot2::ggplot(count_df, ggplot2::aes(x = Var2, y = Var1, fill = Count)) +
+          ggplot2::geom_tile(color = "#0f172a", linewidth = 0.45) +
+          ggplot2::geom_text(ggplot2::aes(label = ifelse(Count > 0, Count, "")), color = "#f8fafc", size = 3) +
+          ggplot2::facet_wrap(~Var3) +
+          ggplot2::scale_fill_gradient(low = "#111c30", high = "#38bdf8") +
+          ggplot2::labs(
+            title = paste("Count heatmap:", selected_vars[1], "by", selected_vars[2]),
+            subtitle = paste("Faceted by", selected_vars[3]),
+            x = selected_vars[2],
+            y = selected_vars[1],
+            fill = "Count"
+          ) +
+          va_plot_theme() +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+      } else {
+        heat_vars <- input$heatmapVars
+        if (is.null(heat_vars) || length(heat_vars) != 2) {
+          heat_vars <- selected_vars[1:2]
+        }
+        count_df <- as.data.frame(table(plot_data[[heat_vars[1]]], plot_data[[heat_vars[2]]]))
+        names(count_df) <- c("Var1", "Var2", "Count")
+        ggplot2::ggplot(count_df, ggplot2::aes(x = Var2, y = Var1, fill = Count)) +
+          ggplot2::geom_tile(color = "#0f172a", linewidth = 0.5) +
+          ggplot2::geom_text(ggplot2::aes(label = ifelse(Count > 0, Count, "")), color = "#f8fafc", size = 3.6) +
+          ggplot2::scale_fill_gradient(low = "#111c30", high = "#38bdf8") +
+          ggplot2::labs(
+            title = paste("Count heatmap:", heat_vars[1], "vs", heat_vars[2]),
+            subtitle = "Brighter cells have more observations",
+            x = heat_vars[2],
+            y = heat_vars[1],
+            fill = "Count"
+          ) +
+          va_plot_theme() +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+      }
+    })
+
     # Insights
     output$multiCatInsights <- renderUI({
-      insights <- list()
-
-      # Total combinations
       total_combos <- prod(dim(multi_table))
       observed_combos <- sum(multi_table > 0)
-
-      insights <- c(insights, paste0(
-        "<li><strong>Sparsity:</strong> ", observed_combos, " out of ", total_combos,
-        " possible combinations are observed (",
-        round(100 * observed_combos / total_combos, 1), "%).</li>"
-      ))
-
-      # Most common pattern
+      coverage <- observed_combos / max(1, total_combos)
       flat_table <- as.data.frame(multi_table)
       most_common_idx <- which.max(flat_table$Freq)
       most_common <- flat_table[most_common_idx, ]
-
-      insights <- c(insights, paste0(
-        "<li><strong>Most Common Pattern:</strong> ",
-        paste(names(most_common)[1:(length(names(most_common)) - 1)],
-          "=", most_common[1:(length(most_common) - 1)],
-          collapse = ", "
-        ),
-        " with ", most_common$Freq, " occurrences.</li>"
-      ))
-
-      # Recommendations
-      recommendations <- paste0(
-        "<h4><i class='fa fa-lightbulb'></i> Recommendations:</h4>",
-        "<ul>",
-        "<li>Use <strong>Mosaic Plot</strong> to visualize proportions across all variables</li>",
-        "<li>Use <strong>Faceted Bar Chart</strong> to compare patterns within groups</li>",
-        "<li>Check chi-square test results for statistical significance</li>",
-        "</ul>"
+      pattern <- paste(
+        names(most_common)[1:(length(names(most_common)) - 1)],
+        "=",
+        unlist(most_common[1:(length(most_common) - 1)]),
+        collapse = ", "
       )
-
-      HTML(paste0(
-        '<div style="background-color: #FFF3E0; padding: 15px; border-radius: 5px; border-left: 4px solid #FF9800;">',
-        '<h4><i class="fa fa-info-circle"></i> Analysis Insights:</h4>',
-        "<ul>",
-        paste(insights, collapse = "\n"),
-        "</ul>",
-        "</div>",
-        "<br>",
-        '<div style="background-color: #E8F5E9; padding: 15px; border-radius: 5px; border-left: 4px solid #4CAF50;">',
-        recommendations,
-        "</div>"
-      ))
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Observed coverage", paste0(round(100 * coverage, 1), "%"), paste(observed_combos, "of", total_combos, "combinations"), ifelse(coverage < 0.35, "warn", "ok")),
+          va_metric("Most common pattern", most_common$Freq, pattern, "neutral")
+        ),
+        va_interpretation(
+          "How to read this page",
+          "Use the heatmap to identify dense and sparse combinations, then compare the pairwise chi-square and Cramer's V summaries to separate statistical evidence from practical association strength.",
+          pills = tagList(
+            va_pill("Heatmap: where counts concentrate", "neutral", "th"),
+            va_pill("Chi-square: evidence", "neutral", "calculator"),
+            va_pill("Cramer's V: strength", "neutral", "signal")
+          )
+        )
+      )
     })
   })
 
@@ -5210,10 +6390,14 @@ server <- function(input, output, session) {
   output$testVarInputs <- renderUI({
     req(data$raw)
 
-    if (input$testType %in% c("One-Sample T-Test", "One-Sample Wilcoxon Test", "Normality Test (Shapiro-Wilk)")) {
+    if (input$testType %in% c("One-Sample T-Test", "One-Sample Wilcoxon Test")) {
       tagList(
         selectInput("testVar1", "Select Variable:", choices = data$numeric_vars),
         numericInput("testMu", "Hypothesized Mean (μ₀):", value = 0)
+      )
+    } else if (input$testType == "Normality Test (Shapiro-Wilk)") {
+      tagList(
+        selectInput("testVar1", "Select Variable:", choices = data$numeric_vars)
       )
     } else if (input$testType == "Two-Sample T-Test") {
       tagList(
@@ -5245,154 +6429,339 @@ server <- function(input, output, session) {
   observeEvent(input$runHypothesisTest, {
     req(data$raw, input$testVar1)
 
-    fmt_p <- function(p) {
-      if (is.na(p)) return("NA")
-      if (p < 0.001) return("< 0.001")
-      sprintf("%.4f", p)
+    alpha <- 0.05
+
+    decision_sentence <- function(p, reject_label = "Reject H0", keep_label = "Fail to reject H0") {
+      if (is.na(p)) return("The test did not return a usable p-value.")
+      if (p < alpha) {
+        paste0(reject_label, " at alpha = ", alpha, ". The result is statistically significant.")
+      } else {
+        paste0(keep_label, " at alpha = ", alpha, ". The result is not statistically significant.")
+      }
     }
 
-    decision_text <- function(p, alpha = 0.05) {
-      if (is.na(p)) return("Decision: Not available")
-      if (p < alpha) {
-        "Decision: Reject H0 at alpha = 0.05"
-      } else {
-        "Decision: Fail to reject H0 at alpha = 0.05"
+    htest_summary_ui <- function(title, subtitle, test_obj, metric_cards, interpretation, assumptions, status = p_status(test_obj$p.value), extra_lines = NULL) {
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("p-value", format.pval(test_obj$p.value, digits = 4), paste("Decision rule: p <", alpha), status),
+          metric_cards
+        ),
+        va_interpretation(
+          title,
+          interpretation,
+          pills = tagList(
+            va_pill(ifelse(test_obj$p.value < alpha, "Reject H0", "Fail to reject H0"), status, ifelse(test_obj$p.value < alpha, "check-circle", "info-circle")),
+            va_pill(subtitle, "neutral", "calculator")
+          )
+        ),
+        va_interpretation("Assumptions and limitations", assumptions),
+        va_details(
+          "Technical details: R test output",
+          c(capture.output(print(test_obj)), extra_lines)
+        )
+      )
+    }
+
+    empty_test_ui <- function(message) {
+      tags$div(class = "va-empty", message)
+    }
+
+    plot_distribution <- function(x, var_name, mu = NULL) {
+      x <- x[is.finite(x)]
+      plot_df <- data.frame(value = x)
+      p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = value)) +
+        ggplot2::geom_histogram(
+          ggplot2::aes(y = ggplot2::after_stat(density)),
+          bins = min(35, max(8, ceiling(sqrt(length(x))))),
+          fill = "#38bdf8", color = "#0f172a", alpha = 0.78
+        ) +
+        ggplot2::geom_rug(color = "#93c5fd", alpha = 0.35) +
+        ggplot2::labs(
+          title = paste("Distribution of", var_name),
+          subtitle = "Histogram scaled to density; reference line shown when applicable",
+          x = var_name,
+          y = "Density"
+        ) +
+        va_plot_theme()
+      if (length(unique(x)) > 1) {
+        p <- p + ggplot2::geom_density(color = "#f8fafc", linewidth = 1.1)
       }
+      if (!is.null(mu) && is.finite(mu)) {
+        p <- p + ggplot2::geom_vline(xintercept = mu, color = "#f97316", linewidth = 1.1, linetype = "dashed")
+      }
+      print(p)
+    }
+
+    plot_group_box <- function(df, group_label, measure_label, title) {
+      ggplot2::ggplot(df, ggplot2::aes(x = stats::reorder(g, y, median, na.rm = TRUE), y = y, fill = g)) +
+        ggplot2::geom_boxplot(alpha = 0.62, outlier.color = "#f97316") +
+        ggplot2::geom_jitter(width = 0.16, alpha = 0.35, color = "#dbeafe", size = 1.8) +
+        ggplot2::scale_fill_manual(values = va_palette(nlevels(df$g), "Set2")) +
+        ggplot2::coord_flip() +
+        ggplot2::labs(
+          title = title,
+          subtitle = "Groups are ordered by median; points show individual observations",
+          x = group_label,
+          y = measure_label,
+          fill = group_label
+        ) +
+        va_plot_theme() +
+        ggplot2::theme(legend.position = "none")
     }
 
     if (input$testType == "One-Sample T-Test") {
       test_data <- data$raw[[input$testVar1]]
+      x <- test_data[is.finite(test_data)]
 
-      output$testResults <- renderText({
-        t_test <- t.test(test_data, mu = input$testMu)
-        paste(
-          "One-Sample T-Test",
-          "",
-          sprintf("Variable: %s", input$testVar1),
-          sprintf("Sample mean: %.4f", mean(test_data, na.rm = TRUE)),
-          sprintf("Hypothesized mean (mu0): %.4f", input$testMu),
-          sprintf("t-statistic: %.4f", unname(t_test$statistic)),
-          sprintf("Degrees of freedom: %.2f", unname(t_test$parameter)),
-          sprintf("P-value: %s", fmt_p(t_test$p.value)),
-          sprintf(
-            "95%% CI: [%.4f, %.4f]",
-            t_test$conf.int[1],
-            t_test$conf.int[2]
+      output$testResults <- renderUI({
+        if (length(x) < 2) {
+          return(empty_test_ui("One-sample t-test requires at least 2 finite numeric values."))
+        }
+        t_test <- t.test(x, mu = input$testMu)
+        htest_summary_ui(
+          "One-sample t-test",
+          "Tests whether the mean differs from the hypothesized mean",
+          t_test,
+          tagList(
+            va_metric("Sample mean", fmt_value(mean(x)), paste("Hypothesized mean:", fmt_value(input$testMu)), "neutral"),
+            va_metric("t-statistic", fmt_value(unname(t_test$statistic)), paste("df =", fmt_value(unname(t_test$parameter), 2)), "neutral"),
+            va_metric("95% CI", paste0("[", fmt_value(t_test$conf.int[1]), ", ", fmt_value(t_test$conf.int[2]), "]"), "For the population mean", "neutral")
           ),
-          decision_text(t_test$p.value),
-          sep = "\n"
+          decision_sentence(t_test$p.value),
+          "Assumes observations are independent and the sampling distribution of the mean is approximately normal. For small samples, strong skew or outliers can affect reliability.",
+          p_status(t_test$p.value),
+          paste("Variable:", input$testVar1)
         )
       })
 
       output$testPlot <- renderPlot({
-        boxplot(test_data,
-          main = "Distribution",
-          ylab = input$testVar1,
-          col = "lightblue"
-        )
-        abline(h = input$testMu, col = "red", lwd = 2, lty = 2)
+        req(length(x) >= 2)
+        plot_distribution(x, input$testVar1, input$testMu)
       })
     } else if (input$testType == "Normality Test (Shapiro-Wilk)") {
       test_data <- data$raw[[input$testVar1]]
-      sample_size <- min(5000, length(test_data))
+      x <- test_data[is.finite(test_data)]
+      sample_size <- min(5000, length(x))
+      sampled_x <- if (sample_size > 0) sample(x, sample_size) else numeric(0)
 
-      output$testResults <- renderText({
-        shapiro_test <- shapiro.test(sample(test_data, sample_size))
-        paste(
-          "Shapiro-Wilk Normality Test",
-          "",
-          sprintf("Variable: %s", input$testVar1),
-          sprintf("Sample size used: %d", sample_size),
-          sprintf("W-statistic: %.4f", unname(shapiro_test$statistic)),
-          sprintf("P-value: %s", fmt_p(shapiro_test$p.value)),
-          if (shapiro_test$p.value < 0.05) {
-            "Conclusion: Evidence suggests the data are not normally distributed."
+      output$testResults <- renderUI({
+        if (length(sampled_x) < 3) {
+          return(empty_test_ui("Shapiro-Wilk normality test requires at least 3 finite numeric values."))
+        }
+        shapiro_test <- shapiro.test(sampled_x)
+        norm_status <- if (shapiro_test$p.value < alpha) "bad" else "ok"
+        htest_summary_ui(
+          "Shapiro-Wilk normality test",
+          "Tests whether the distribution departs from normality",
+          shapiro_test,
+          tagList(
+            va_metric("W-statistic", fmt_value(unname(shapiro_test$statistic)), "Closer to 1 is more normal-looking", "neutral"),
+            va_metric("Sample used", format(sample_size, big.mark = ","), "Shapiro-Wilk uses at most 5,000 observations", "neutral"),
+            va_metric("Practical result", ifelse(shapiro_test$p.value < alpha, "Non-normal signal", "No strong departure"), "Use the Q-Q plot too", norm_status)
+          ),
+          if (shapiro_test$p.value < alpha) {
+            "Reject H0: the data show evidence of non-normality. Check the Q-Q plot to see whether the departure is severe or driven by outliers."
           } else {
-            "Conclusion: No strong evidence against normality."
+            "Fail to reject H0: there is no strong statistical evidence against normality. This does not prove the data are perfectly normal."
           },
-          sep = "\n"
+          "The test is sensitive: with large samples, tiny departures can become significant; with small samples, clear non-normality may be missed.",
+          norm_status,
+          paste("Variable:", input$testVar1)
         )
       })
 
       output$testPlot <- renderPlot({
-        qqnorm(test_data, main = "Q-Q Plot")
-        qqline(test_data, col = "red", lwd = 2)
+        req(length(x) >= 3)
+        qq_df <- data.frame(value = x)
+        ggplot2::ggplot(qq_df, ggplot2::aes(sample = value)) +
+          ggplot2::stat_qq(color = "#38bdf8", alpha = 0.75, size = 2) +
+          ggplot2::stat_qq_line(color = "#f97316", linewidth = 1.1) +
+          ggplot2::labs(
+            title = paste("Q-Q plot:", input$testVar1),
+            subtitle = "Points close to the line are more consistent with normality",
+            x = "Theoretical quantiles",
+            y = "Sample quantiles"
+          ) +
+          va_plot_theme()
       })
     } else if (input$testType == "Two-Sample T-Test") {
       req(input$testVar2)
-      group_var <- data$raw[[input$testVar1]]
-      measure_var <- data$raw[[input$testVar2]]
+      df_test <- data.frame(
+        g = clean_cat_vector(data$raw[[input$testVar1]]),
+        y = data$raw[[input$testVar2]]
+      )
+      df_test <- df_test[complete.cases(df_test) & is.finite(df_test$y), , drop = FALSE]
+      df_test$g <- droplevels(df_test$g)
 
-      output$testResults <- renderText({
-        t_test <- t.test(measure_var ~ group_var)
-        grp_levels <- unique(stats::na.omit(as.character(group_var)))
-        paste(
-          "Two-Sample T-Test",
-          "",
-          sprintf("Grouping variable: %s", input$testVar1),
-          sprintf("Measurement variable: %s", input$testVar2),
-          sprintf("Groups compared: %s", paste(grp_levels, collapse = " vs ")),
-          sprintf("t-statistic: %.4f", unname(t_test$statistic)),
-          sprintf("Degrees of freedom: %.2f", unname(t_test$parameter)),
-          sprintf("P-value: %s", fmt_p(t_test$p.value)),
-          sprintf(
-            "95%% CI of mean difference: [%.4f, %.4f]",
-            t_test$conf.int[1],
-            t_test$conf.int[2]
+      output$testResults <- renderUI({
+        if (nlevels(df_test$g) != 2 || nrow(df_test) < 3) {
+          return(empty_test_ui("Two-sample t-test requires exactly 2 groups and enough complete numeric observations."))
+        }
+        t_test <- t.test(y ~ g, data = df_test)
+        group_means <- tapply(df_test$y, df_test$g, mean)
+        htest_summary_ui(
+          "Two-sample t-test",
+          "Tests whether two group means differ",
+          t_test,
+          tagList(
+            va_metric("Groups", paste(levels(df_test$g), collapse = " vs "), paste("n =", paste(table(df_test$g), collapse = " / ")), "neutral"),
+            va_metric("Mean difference", fmt_value(diff(group_means)), "Second group mean minus first group mean", "neutral"),
+            va_metric("t-statistic", fmt_value(unname(t_test$statistic)), paste("df =", fmt_value(unname(t_test$parameter), 2)), "neutral"),
+            va_metric("95% CI", paste0("[", fmt_value(t_test$conf.int[1]), ", ", fmt_value(t_test$conf.int[2]), "]"), "For mean difference", "neutral")
           ),
-          decision_text(t_test$p.value),
-          sep = "\n"
+          decision_sentence(t_test$p.value),
+          "Welch's t-test does not assume equal variances, but it still assumes independent observations and roughly normal group distributions or enough sample size.",
+          p_status(t_test$p.value),
+          c(paste("Grouping variable:", input$testVar1), paste("Measurement variable:", input$testVar2))
         )
       })
 
       output$testPlot <- renderPlot({
-        boxplot(measure_var ~ group_var,
-          main = "Group Comparison",
-          xlab = input$testVar1,
-          ylab = input$testVar2,
-          col = c("lightblue", "lightgreen")
+        req(nlevels(df_test$g) == 2)
+        print(plot_group_box(df_test, input$testVar1, input$testVar2, "Two-group comparison"))
+      })
+    } else if (input$testType == "Paired T-Test") {
+      req(input$testVar2)
+      df_test <- data.frame(x = data$raw[[input$testVar1]], y = data$raw[[input$testVar2]])
+      df_test <- df_test[complete.cases(df_test) & is.finite(df_test$x) & is.finite(df_test$y), , drop = FALSE]
+      diff_vals <- df_test$x - df_test$y
+
+      output$testResults <- renderUI({
+        if (nrow(df_test) < 2) {
+          return(empty_test_ui("Paired t-test requires at least 2 complete numeric pairs."))
+        }
+        t_test <- t.test(df_test$x, df_test$y, paired = TRUE)
+        htest_summary_ui(
+          "Paired t-test",
+          "Tests whether the mean paired difference differs from zero",
+          t_test,
+          tagList(
+            va_metric("Complete pairs", nrow(df_test), "Rows with both variables present", "ok"),
+            va_metric("Mean difference", fmt_value(mean(diff_vals)), paste(input$testVar1, "-", input$testVar2), "neutral"),
+            va_metric("t-statistic", fmt_value(unname(t_test$statistic)), paste("df =", fmt_value(unname(t_test$parameter), 2)), "neutral"),
+            va_metric("95% CI", paste0("[", fmt_value(t_test$conf.int[1]), ", ", fmt_value(t_test$conf.int[2]), "]"), "For mean paired difference", "neutral")
+          ),
+          decision_sentence(t_test$p.value),
+          "Requires paired observations from the same units or matched units. The paired differences should be approximately normal for small samples.",
+          p_status(t_test$p.value),
+          c(paste("Variable 1:", input$testVar1), paste("Variable 2:", input$testVar2))
         )
+      })
+
+      output$testPlot <- renderPlot({
+        req(nrow(df_test) >= 2)
+        plot_distribution(diff_vals, paste(input$testVar1, "-", input$testVar2), 0)
       })
     } else if (input$testType == "One-Way ANOVA (F-Test)") {
       req(input$testVar2)
-      group_var <- as.factor(data$raw[[input$testVar1]])
-      measure_var <- data$raw[[input$testVar2]]
-      df_test <- data.frame(g = group_var, y = measure_var)
-      df_test <- df_test[complete.cases(df_test), , drop = FALSE]
+      df_test <- data.frame(
+        g = clean_cat_vector(data$raw[[input$testVar1]]),
+        y = data$raw[[input$testVar2]]
+      )
+      df_test <- df_test[complete.cases(df_test) & is.finite(df_test$y), , drop = FALSE]
+      df_test$g <- droplevels(df_test$g)
 
-      output$testResults <- renderText({
+      output$testResults <- renderUI({
         if (nlevels(df_test$g) < 2) {
-          return("ANOVA requires at least 2 groups.")
+          return(empty_test_ui("ANOVA requires at least 2 groups with complete numeric observations."))
         }
         aov_fit <- aov(y ~ g, data = df_test)
         anova_tbl <- summary(aov_fit)[[1]]
         f_stat <- anova_tbl$`F value`[1]
         p_val <- anova_tbl$`Pr(>F)`[1]
-        df_between <- anova_tbl$Df[1]
-        df_within <- anova_tbl$Df[2]
-        paste(
-          "One-Way ANOVA (F-Test)",
-          "",
-          sprintf("Grouping variable: %s", input$testVar1),
-          sprintf("Measurement variable: %s", input$testVar2),
-          sprintf("Number of groups: %d", nlevels(df_test$g)),
-          sprintf("F-statistic: %.4f", f_stat),
-          sprintf("Degrees of freedom: %d, %d", df_between, df_within),
-          sprintf("P-value: %s", fmt_p(p_val)),
-          decision_text(p_val),
-          sep = "\n"
+        fake_test <- list(
+          statistic = c(F = f_stat),
+          parameter = c(df1 = anova_tbl$Df[1], df2 = anova_tbl$Df[2]),
+          p.value = p_val,
+          method = "One-way ANOVA",
+          data.name = paste(input$testVar2, "by", input$testVar1)
+        )
+        class(fake_test) <- "htest"
+        htest_summary_ui(
+          "One-way ANOVA",
+          "Tests whether at least one group mean differs",
+          fake_test,
+          tagList(
+            va_metric("Groups", nlevels(df_test$g), paste("n =", paste(table(df_test$g), collapse = " / ")), "neutral"),
+            va_metric("F-statistic", fmt_value(f_stat), paste("df =", anova_tbl$Df[1], ",", anova_tbl$Df[2]), "neutral"),
+            va_metric("Between-group MS", fmt_value(anova_tbl$`Mean Sq`[1]), "Variation among group means", "neutral")
+          ),
+          decision_sentence(p_val),
+          "ANOVA assumes independent observations, roughly normal residuals within groups, and similar variances. A significant result says at least one mean differs, not which groups differ.",
+          p_status(p_val),
+          capture.output(print(summary(aov_fit)))
         )
       })
 
       output$testPlot <- renderPlot({
-        boxplot(y ~ g,
-          data = df_test,
-          main = "One-Way ANOVA: Group Comparison",
-          xlab = input$testVar1,
-          ylab = input$testVar2,
-          col = brewer.pal(min(8, nlevels(df_test$g)), "Set2"),
-          las = 2
+        req(nlevels(df_test$g) >= 2)
+        print(plot_group_box(df_test, input$testVar1, input$testVar2, "ANOVA group comparison"))
+      })
+    } else if (input$testType == "One-Sample Wilcoxon Test") {
+      x <- data$raw[[input$testVar1]]
+      x <- x[is.finite(x)]
+
+      output$testResults <- renderUI({
+        if (length(x) < 1) {
+          return(empty_test_ui("One-sample Wilcoxon test requires finite numeric values."))
+        }
+        w_test <- wilcox.test(x, mu = input$testMu, conf.int = TRUE, exact = FALSE)
+        htest_summary_ui(
+          "One-sample Wilcoxon signed-rank test",
+          "Tests whether the distribution center differs from the hypothesized value",
+          w_test,
+          tagList(
+            va_metric("Sample median", fmt_value(median(x)), paste("Hypothesized center:", fmt_value(input$testMu)), "neutral"),
+            va_metric("V statistic", fmt_value(unname(w_test$statistic)), "Rank-based statistic", "neutral"),
+            va_metric("Complete values", length(x), "Finite numeric values used", "ok")
+          ),
+          decision_sentence(w_test$p.value),
+          "This nonparametric test is less sensitive to non-normality than a t-test, but it assumes independent observations and is best interpreted as a test of location under roughly symmetric differences.",
+          p_status(w_test$p.value),
+          paste("Variable:", input$testVar1)
         )
+      })
+
+      output$testPlot <- renderPlot({
+        req(length(x) >= 1)
+        plot_distribution(x, input$testVar1, input$testMu)
+      })
+    } else if (input$testType == "Two-Sample Wilcoxon Test") {
+      req(input$testVar2)
+      df_test <- data.frame(
+        g = clean_cat_vector(data$raw[[input$testVar1]]),
+        y = data$raw[[input$testVar2]]
+      )
+      df_test <- df_test[complete.cases(df_test) & is.finite(df_test$y), , drop = FALSE]
+      df_test$g <- droplevels(df_test$g)
+
+      output$testResults <- renderUI({
+        if (nlevels(df_test$g) != 2 || nrow(df_test) < 2) {
+          return(empty_test_ui("Two-sample Wilcoxon test requires exactly 2 groups and complete numeric observations."))
+        }
+        w_test <- wilcox.test(y ~ g, data = df_test, exact = FALSE)
+        medians <- tapply(df_test$y, df_test$g, median)
+        htest_summary_ui(
+          "Two-sample Wilcoxon rank-sum test",
+          "Tests whether two groups tend to have different values",
+          w_test,
+          tagList(
+            va_metric("Groups", paste(levels(df_test$g), collapse = " vs "), paste("n =", paste(table(df_test$g), collapse = " / ")), "neutral"),
+            va_metric("Median difference", fmt_value(diff(medians)), "Second group median minus first", "neutral"),
+            va_metric("W statistic", fmt_value(unname(w_test$statistic)), "Rank-based statistic", "neutral")
+          ),
+          decision_sentence(w_test$p.value),
+          "This nonparametric test compares ranks rather than means. It is robust to skew, but different distribution shapes can complicate median-only interpretations.",
+          p_status(w_test$p.value),
+          c(paste("Grouping variable:", input$testVar1), paste("Measurement variable:", input$testVar2))
+        )
+      })
+
+      output$testPlot <- renderPlot({
+        req(nlevels(df_test$g) == 2)
+        print(plot_group_box(df_test, input$testVar1, input$testVar2, "Two-group rank comparison"))
       })
     }
   })
@@ -5766,7 +7135,7 @@ server <- function(input, output, session) {
     if (length(data$numeric_vars) >= 2) {
       recommendations <- paste0(
         recommendations,
-        "<li>Explore correlations in the <strong>Correlation Matrix</strong> tab</li>"
+        "<li>Explore numeric relationships in the <strong>Variable Analysis</strong> tab</li>"
       )
     }
 
@@ -5872,63 +7241,232 @@ server <- function(input, output, session) {
     model <- lm(formula_slr, data = df_slr)
     slr_model(model)
 
-    # Scatter plot
+    sm   <- summary(model)
+    cf   <- coef(sm)
+    an   <- anova(model)
+    ci   <- confint(model, level = 0.95)
+    r2   <- sm$r.squared
+    ar2  <- sm$adj.r.squared
+    sigma_v <- sm$sigma
+    fstat   <- sm$fstatistic
+    f_p     <- if (!is.null(fstat)) pf(fstat[1], fstat[2], fstat[3], lower.tail = FALSE) else NA_real_
+
+    # ── Scatter plot (ggplot2) ───────────────────────────────
     output$slrScatter <- renderPlot({
-      plot(x, y,
-        xlab = input$slrX, ylab = input$slrY,
-        main = paste("Scatter Plot:", input$slrY, "vs", input$slrX),
-        pch = 19, col = rgb(0.2, 0.5, 0.8, 0.6), cex = 1.2
-      )
-      abline(model, col = "red", lwd = 2)
-      legend("topleft",
-        legend = paste0(
-          "y = ", round(coef(model)[1], 4),
-          ifelse(length(coef(model)) > 1,
-            paste0(" + ", round(coef(model)[2], 4), " x"), ""
+      df_plot  <- data.frame(x = x, y = y)
+      b0 <- coef(model)[1]; b1 <- if (length(coef(model)) > 1) coef(model)[2] else 0
+      eq_label <- if (input$slrNoIntercept) {
+        sprintf("y = %.4f x", b1)
+      } else {
+        sprintf("y = %.4f %s %.4f x", b0, ifelse(b1 >= 0, "+", "-"), abs(b1))
+      }
+      ggplot2::ggplot(df_plot, ggplot2::aes(x = x, y = y)) +
+        ggplot2::geom_point(color = "#38bdf8", alpha = 0.75, size = 2.6) +
+        ggplot2::geom_smooth(method = "lm",
+          formula = if (input$slrNoIntercept) y ~ 0 + x else y ~ x,
+          se = TRUE, color = "#f97316", fill = "#f97316", alpha = 0.14, linewidth = 1.1) +
+        ggplot2::annotate("text", x = -Inf, y = Inf,
+          label = eq_label, hjust = -0.08, vjust = 1.5,
+          color = "#fdba74", size = 4.5, fontface = "bold") +
+        ggplot2::labs(
+          title = paste("Scatter Plot:", input$slrY, "vs", input$slrX),
+          subtitle = sprintf("R² = %.4f  |  Adj R² = %.4f  |  Residual SE = %.4f", r2, ar2, sigma_v),
+          x = input$slrX, y = input$slrY
+        ) +
+        va_plot_theme()
+    })
+
+    # ── Model Summary (styled card) ──────────────────────────
+    output$slrSummary <- renderUI({
+      coef_df <- as.data.frame(cf)
+      coef_df <- cbind(Term = rownames(coef_df), round(coef_df, 4))
+      rownames(coef_df) <- NULL
+      names(coef_df) <- c("Term", "Estimate", "Std.Error", "t value", "Pr(>|t|)")
+      sig_badge <- function(p) {
+        if (is.na(p)) return(tags$span("N/A"))
+        cls <- if (p < 0.001) "ok" else if (p < 0.01) "ok" else if (p < 0.05) "ok" else if (p < 0.1) "warn" else "bad"
+        lbl <- if (p < 0.001) "***" else if (p < 0.01) "**" else if (p < 0.05) "*" else if (p < 0.1) "." else "ns"
+        tags$span(class = paste("va-pill", cls), lbl, " ", format.pval(p, digits = 4, eps = 0.0001))
+      }
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("R²", fmt_value(r2, 4), "Variation in Y explained by X",
+            if (r2 >= 0.7) "ok" else if (r2 >= 0.4) "warn" else "bad"),
+          va_metric("Adjusted R²", fmt_value(ar2, 4), "Penalised for number of predictors",
+            if (ar2 >= 0.7) "ok" else if (ar2 >= 0.4) "warn" else "bad"),
+          va_metric("Residual SE", fmt_value(sigma_v, 4), "Average prediction error (in Y units)", "neutral"),
+          va_metric("F-test p-value", format.pval(f_p, digits = 4), "Overall model significance", p_status(f_p))
+        ),
+        va_interpretation(
+          "What does the model say?",
+          paste0(
+            "The model explains ", round(100 * r2, 1), "% of the variation in ", input$slrY, ". ",
+            if (!is.na(f_p) && f_p < 0.05) {
+              paste0("The overall F-test is significant (p = ", format.pval(f_p, digits = 4), "), indicating that ",
+                input$slrX, " is a useful linear predictor of ", input$slrY, ".")
+            } else {
+              paste0("The overall F-test is not significant (p = ", format.pval(f_p, digits = 4), "), suggesting ",
+                input$slrX, " may not be a reliable linear predictor.")
+            }
+          ),
+          pills = tagList(
+            va_pill(paste("R² =", fmt_value(r2, 4)), if (r2 >= 0.7) "ok" else if (r2 >= 0.4) "warn" else "bad", "chart-line"),
+            va_pill(if (!is.na(f_p) && f_p < 0.05) "Significant F-test" else "Non-significant F",
+              p_status(f_p), if (!is.na(f_p) && f_p < 0.05) "check-circle" else "info-circle")
           )
         ),
-        col = "red", lwd = 2, bty = "n"
+        tags$h5(style = "margin:12px 0 6px; color:#93c5fd; font-weight:700;", "Coefficients"),
+        tags$table(
+          class = "va-table",
+          tags$thead(tags$tr(
+            tags$th("Term"), tags$th("Estimate"), tags$th("Std. Error"),
+            tags$th("t value"), tags$th("p-value")
+          )),
+          tags$tbody(lapply(seq_len(nrow(coef_df)), function(i) {
+            p_val <- suppressWarnings(as.numeric(coef_df[["Pr(>|t|)"]][i]))
+            tags$tr(
+              tags$td(tags$strong(coef_df$Term[i])),
+              tags$td(coef_df$Estimate[i]),
+              tags$td(coef_df$`Std.Error`[i]),
+              tags$td(coef_df$`t value`[i]),
+              tags$td(sig_badge(p_val))
+            )
+          }))
+        ),
+        va_details("Technical details: full R summary",
+          c(capture.output(print(model)), "", capture.output(print(sm))))
       )
     })
 
-    # Model summary
-    output$slrSummary <- renderPrint({
-      cat("Fitted Model:\n")
-      print(model)
-      cat("\n")
-      print(summary(model))
-    })
-
-    # ANOVA
-    output$slrAnova <- renderPrint({
-      cat("ANOVA Table (Overall Significance)\n")
-      cat(strrep("=", 50), "\n\n")
-      print(anova(model))
-    })
-
-    # Confidence intervals for coefficients
-    output$slrConfint <- renderPrint({
-      cat("95% Confidence Intervals for Coefficients\n")
-      cat(strrep("=", 50), "\n\n")
-      print(confint(model, level = 0.95))
-    })
-
-    # Correlation analysis
-    output$slrCorrelation <- renderPrint({
-      cat("Correlation Analysis\n")
-      cat(strrep("=", 50), "\n\n")
-
-      cat("Pearson (parametric):\n")
-      print(cor.test(y, x, method = "pearson"))
-
-      cat("\nSpearman (non-parametric):\n")
-      tryCatch(print(cor.test(y, x, method = "spearman")),
-        warning = function(w) cat(conditionMessage(w), "\n")
+    # ── ANOVA (styled card) ──────────────────────────────────
+    output$slrAnova <- renderUI({
+      anova_df <- as.data.frame(an)
+      anova_df <- cbind(Source = rownames(anova_df), round(anova_df, 4))
+      rownames(anova_df) <- NULL
+      f_row <- an[1, ]
+      f_val  <- f_row[["F value"]]
+      p_val  <- f_row[["Pr(>F)"]]
+      ssr <- f_row[["Sum Sq"]]
+      sse <- if (nrow(an) > 1) an[nrow(an), "Sum Sq"] else NA_real_
+      sst <- ssr + if (!is.na(sse)) sse else 0
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("SS Regression", fmt_value(ssr, 4), "Variation explained by the model", "neutral"),
+          va_metric("SS Residual", fmt_value(sse, 4), "Unexplained variation (error)", "neutral"),
+          va_metric("F-statistic", fmt_value(f_val, 4), paste0("df = ", an$Df[1], ", ", if (nrow(an) > 1) an$Df[nrow(an)] else "N/A"), "neutral"),
+          va_metric("p-value", format.pval(p_val, digits = 4), "H₀: slope = 0", p_status(p_val))
+        ),
+        va_interpretation(
+          "ANOVA: is the linear relationship significant?",
+          paste0(
+            if (!is.na(p_val) && p_val < 0.05) {
+              paste0("Reject H₀ (p = ", format.pval(p_val, digits = 4), "). ",
+                "The regression explains significantly more variation than a model with just the mean. ",
+                "Conclusion: the linear relationship between ", input$slrX, " and ", input$slrY, " is statistically significant.")
+            } else {
+              paste0("Fail to reject H₀ (p = ", format.pval(p_val, digits = 4), "). ",
+                "The regression does not explain significantly more variation than a mean-only model.")
+            }
+          ),
+          pills = tagList(
+            va_pill(if (!is.na(p_val) && p_val < 0.05) "Reject H₀" else "Fail to reject H₀",
+              p_status(p_val), if (!is.na(p_val) && p_val < 0.05) "check-circle" else "info-circle"),
+            va_pill(paste("F =", fmt_value(f_val, 3)), "neutral", "calculator")
+          )
+        ),
+        va_details("Technical details: ANOVA table", capture.output(print(an)))
       )
+    })
 
-      cat("\nKendall (non-parametric):\n")
-      tryCatch(print(cor.test(y, x, method = "kendall")),
-        warning = function(w) cat(conditionMessage(w), "\n")
+    # ── Confidence Intervals (styled card) ───────────────────
+    output$slrConfint <- renderUI({
+      ci_df <- as.data.frame(round(ci, 4))
+      ci_df <- cbind(Term = rownames(ci_df), ci_df)
+      rownames(ci_df) <- NULL
+      names(ci_df) <- c("Term", "Lower 2.5%", "Upper 97.5%")
+      tags$div(
+        class = "va-summary",
+        va_interpretation(
+          "95% Confidence intervals for regression coefficients",
+          paste0(
+            "Each interval gives a plausible range for the true population coefficient at 95% confidence. ",
+            "If an interval for a slope does not contain zero, that predictor is statistically significant at the 5% level."
+          ),
+          pills = tagList(
+            va_pill("95% confidence level", "neutral", "arrows-alt-h"),
+            va_pill("Excludes 0 → significant", "ok", "check-circle")
+          )
+        ),
+        va_table(ci_df),
+        va_details("Technical details: confint output", capture.output(print(confint(model, level = 0.95))))
+      )
+    })
+
+    # ── Correlation Tests (styled card) ──────────────────────
+    output$slrCorrelation <- renderUI({
+      pear  <- tryCatch(cor.test(y, x, method = "pearson"),  error = function(e) NULL)
+      spear <- tryCatch(suppressWarnings(cor.test(y, x, method = "spearman")), error = function(e) NULL)
+      kend  <- tryCatch(suppressWarnings(cor.test(y, x, method = "kendall")),  error = function(e) NULL)
+      r_val <- if (!is.null(pear)) unname(pear$estimate) else NA_real_
+      strength_label <- function(r) {
+        if (is.na(r)) return("N/A")
+        ar <- abs(r)
+        if (ar >= 0.9) "Very strong" else if (ar >= 0.7) "Strong" else if (ar >= 0.5) "Moderate" else if (ar >= 0.3) "Weak" else "Very weak"
+      }
+      corr_row <- function(label, test_obj) {
+        if (is.null(test_obj)) return(tags$tr(tags$td(label), tags$td("N/A"), tags$td("N/A"), tags$td("N/A")))
+        r_e <- unname(test_obj$estimate)
+        p_e <- test_obj$p.value
+        tags$tr(
+          tags$td(tags$strong(label)),
+          tags$td(fmt_value(r_e, 4)),
+          tags$td(format.pval(p_e, digits = 4, eps = 0.0001)),
+          tags$td(tags$span(class = paste("va-pill", p_status(p_e)),
+            if (p_e < 0.05) icon("check-circle") else icon("info-circle"),
+            if (p_e < 0.05) "Significant" else "Not significant"))
+        )
+      }
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Pearson r", fmt_value(r_val, 4),
+            paste0(strength_label(r_val), " ", if (!is.na(r_val) && r_val >= 0) "positive" else "negative", " linear association"),
+            if (abs(r_val) >= 0.7) "ok" else if (abs(r_val) >= 0.4) "warn" else "neutral"),
+          va_metric("Pearson r²", fmt_value(r_val^2, 4), "Proportion of shared variance", "neutral"),
+          va_metric("Pearson p-value", if (!is.null(pear)) format.pval(pear$p.value, digits = 4) else "N/A",
+            "H₀: true correlation = 0", if (!is.null(pear)) p_status(pear$p.value) else "bad")
+        ),
+        va_interpretation(
+          "Interpreting correlation",
+          paste0(
+            "Pearson r measures linear association (assumes normality and linearity). ",
+            "Spearman and Kendall are rank-based (non-parametric) alternatives robust to outliers and non-normality. ",
+            "A large r does not prove causation."
+          ),
+          pills = tagList(
+            va_pill(paste0("r = ", fmt_value(r_val, 3), " (", strength_label(r_val), ")"),
+              if (abs(r_val) >= 0.7) "ok" else if (abs(r_val) >= 0.4) "warn" else "neutral", "link")
+          )
+        ),
+        tags$table(
+          class = "va-table",
+          tags$thead(tags$tr(tags$th("Method"), tags$th("Correlation"), tags$th("p-value"), tags$th("Result"))),
+          tags$tbody(
+            corr_row("Pearson", pear),
+            corr_row("Spearman", spear),
+            corr_row("Kendall", kend)
+          )
+        ),
+        va_details("Technical details: raw test outputs",
+          c(if (!is.null(pear)) c("Pearson:", capture.output(print(pear)), "") else "Pearson: failed",
+            if (!is.null(spear)) c("Spearman:", capture.output(print(spear)), "") else "Spearman: failed",
+            if (!is.null(kend)) c("Kendall:", capture.output(print(kend))) else "Kendall: failed")
+        )
       )
     })
   })
@@ -5964,13 +7502,51 @@ server <- function(input, output, session) {
             rownames = FALSE
           )
         })
-        output$slrInterpExtrap <- renderPrint({
+        output$slrInterpExtrap <- renderUI({
           check <- ifelse(x0 > max(x_orig, na.rm = TRUE) | x0 < min(x_orig, na.rm = TRUE),
             "EXTRAPOLATION", "interpolation"
           )
-          for (i in seq_along(x0)) {
-            cat(sprintf("x = %-8.3f  =>  %s\n", x0[i], check[i]))
-          }
+          extrap_n <- sum(check == "EXTRAPOLATION")
+          rows_ui <- lapply(seq_along(x0), function(i) {
+            is_ext <- check[i] == "EXTRAPOLATION"
+            tags$tr(
+              tags$td(fmt_value(x0[i], 4)),
+              tags$td(
+                tags$span(class = paste("va-pill", if (is_ext) "bad" else "ok"),
+                  if (is_ext) icon("exclamation-triangle") else icon("check-circle"),
+                  check[i])
+              ),
+              tags$td(if (is_ext) "Unreliable — outside training range" else "Reliable — inside training range")
+            )
+          })
+          tags$div(
+            class = "va-summary",
+            tags$div(
+              class = "va-metric-grid",
+              va_metric("X range (training)",
+                paste0("[", fmt_value(min(x_orig, na.rm = TRUE), 3), ", ", fmt_value(max(x_orig, na.rm = TRUE), 3), "]"),
+                "Observed X values used to fit the model", "neutral"),
+              va_metric("Points queried", length(x0), "New X values entered", "neutral"),
+              va_metric("Extrapolations", extrap_n,
+                if (extrap_n > 0) "Predictions outside training range" else "All inside training range",
+                if (extrap_n > 0) "bad" else "ok")
+            ),
+            va_interpretation(
+              "Interpolation vs. Extrapolation",
+              paste0("Predictions within the training range of X are interpolations and are generally reliable. ",
+                "Predictions outside that range are extrapolations — the model's linear assumption may not hold ",
+                "beyond observed data, so treat those predictions with caution."),
+              pills = tagList(
+                va_pill("Inside range: safe", "ok", "check-circle"),
+                va_pill("Outside range: caution", if (extrap_n > 0) "bad" else "neutral", "exclamation-triangle")
+              )
+            ),
+            tags$table(
+              class = "va-table",
+              tags$thead(tags$tr(tags$th("X Value"), tags$th("Classification"), tags$th("Guidance"))),
+              tags$tbody(rows_ui)
+            )
+          )
         })
       },
       error = function(e) {
@@ -6063,91 +7639,322 @@ server <- function(input, output, session) {
       )
     })
 
-    # Model summary
-    output$mlrSummary <- renderPrint({
-      cat("Fitted Model:\n")
-      print(model)
-      cat("\n")
-      print(summary(model))
+    # ── Pre-compute shared MLR summary values ────────────────────────────────────
+    sm_mlr    <- summary(model)
+    cf_mlr    <- coef(sm_mlr)
+    an_mlr    <- anova(model)
+    ci_mlr    <- confint(model, level = 0.95)
+    r2_mlr    <- sm_mlr$r.squared
+    ar2_mlr   <- sm_mlr$adj.r.squared
+    sig_mlr   <- sm_mlr$sigma
+    fstat_mlr <- sm_mlr$fstatistic
+    fp_mlr    <- if (!is.null(fstat_mlr)) pf(fstat_mlr[1], fstat_mlr[2], fstat_mlr[3], lower.tail = FALSE) else NA_real_
+
+    sig_badge_mlr <- function(p) {
+      if (is.na(p)) return(tags$span("N/A"))
+      cls <- if (p < 0.001) "ok" else if (p < 0.01) "ok" else if (p < 0.05) "ok" else if (p < 0.1) "warn" else "bad"
+      lbl <- if (p < 0.001) "***" else if (p < 0.01) "**" else if (p < 0.05) "*" else if (p < 0.1) "." else "ns"
+      tags$span(class = paste("va-pill", cls), lbl, " ", format.pval(p, digits = 4, eps = 0.0001))
+    }
+
+    # ── Observed vs Predicted (ggplot2) ──────────────────────────────────────────
+    output$mlrFitLine <- renderPlot({
+      y_obs <- model.response(model.frame(model))
+      y_hat <- fitted(model)
+      df_obs <- data.frame(fitted = y_hat, observed = y_obs)
+      ggplot2::ggplot(df_obs, ggplot2::aes(x = fitted, y = observed)) +
+        ggplot2::geom_point(color = "#38bdf8", alpha = 0.72, size = 2.2) +
+        ggplot2::geom_abline(slope = 1, intercept = 0, color = "#f97316", linewidth = 1, linetype = "dashed") +
+        ggplot2::geom_smooth(method = "lm", formula = y ~ x,
+          color = "#22c55e", fill = "#22c55e", alpha = 0.12, linewidth = 0.9) +
+        ggplot2::labs(
+          title = "Observed vs Predicted",
+          subtitle = sprintf("R\u00b2 = %.4f  |  Adj R\u00b2 = %.4f  |  Residual SE = %.4f", r2_mlr, ar2_mlr, sig_mlr),
+          x = "Predicted values", y = paste("Observed:", input$mlrY)
+        ) +
+        va_plot_theme()
     })
 
-    # ANOVA table
-    output$mlrAnova <- renderPrint({
-      cat("ANOVA Table (Overall Significance)\n")
-      cat(strrep("=", 50), "\n\n")
-      print(anova(model))
+    # ── Model Summary (styled card) ───────────────────────────────────────────────
+    output$mlrSummary <- renderUI({
+      coef_df <- as.data.frame(cf_mlr)
+      coef_df <- cbind(Term = rownames(coef_df), round(coef_df, 4))
+      rownames(coef_df) <- NULL
+      names(coef_df) <- c("Term", "Estimate", "Std.Error", "t value", "Pr(>|t|)")
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("R\u00b2", fmt_value(r2_mlr, 4), "Variation in Y explained by all predictors",
+            if (r2_mlr >= 0.7) "ok" else if (r2_mlr >= 0.4) "warn" else "bad"),
+          va_metric("Adjusted R\u00b2", fmt_value(ar2_mlr, 4), "Penalised for number of predictors",
+            if (ar2_mlr >= 0.7) "ok" else if (ar2_mlr >= 0.4) "warn" else "bad"),
+          va_metric("Residual SE", fmt_value(sig_mlr, 4), "Average prediction error in Y units", "neutral"),
+          va_metric("F-test p-value", format.pval(fp_mlr, digits = 4),
+            paste("df =", fstat_mlr[2], ",", fstat_mlr[3]), p_status(fp_mlr))
+        ),
+        va_interpretation(
+          "What does the MLR model say?",
+          paste0(
+            "The model with ", length(xvars), " predictors explains ", round(100 * r2_mlr, 1),
+            "% of the variation in ", input$mlrY, ". ",
+            if (!is.na(fp_mlr) && fp_mlr < 0.05)
+              paste0("The overall F-test is significant (p = ", format.pval(fp_mlr, digits = 4),
+                "), indicating at least one predictor contributes meaningfully.")
+            else
+              paste0("The overall F-test is not significant (p = ", format.pval(fp_mlr, digits = 4), ").")
+          ),
+          pills = tagList(
+            va_pill(paste("R\u00b2 =", fmt_value(r2_mlr, 4)),
+              if (r2_mlr >= 0.7) "ok" else if (r2_mlr >= 0.4) "warn" else "bad", "chart-line"),
+            va_pill(if (!is.na(fp_mlr) && fp_mlr < 0.05) "Significant F" else "Non-significant F",
+              p_status(fp_mlr), if (!is.na(fp_mlr) && fp_mlr < 0.05) "check-circle" else "info-circle")
+          )
+        ),
+        tags$h5(style = "margin:12px 0 6px; color:#93c5fd; font-weight:700;", "Coefficients"),
+        tags$table(
+          class = "va-table",
+          tags$thead(tags$tr(
+            tags$th("Term"), tags$th("Estimate"), tags$th("Std. Error"),
+            tags$th("t value"), tags$th("p-value")
+          )),
+          tags$tbody(lapply(seq_len(nrow(coef_df)), function(i) {
+            pv <- suppressWarnings(as.numeric(coef_df[["Pr(>|t|)"]][i]))
+            tags$tr(
+              tags$td(tags$strong(coef_df$Term[i])),
+              tags$td(coef_df$Estimate[i]),
+              tags$td(coef_df$Std.Error[i]),
+              tags$td(coef_df$`t value`[i]),
+              tags$td(sig_badge_mlr(pv))
+            )
+          }))
+        ),
+        va_details("Technical details: full R summary",
+          c(capture.output(print(model)), "", capture.output(print(sm_mlr))))
+      )
     })
 
-    # Partial F-tests: test each predictor (H0: beta_i = 0)
-    output$mlrPartialF <- renderPrint({
-      cat("Partial F-Tests (each predictor vs. full model)\n")
-      cat(strrep("=", 55), "\n\n")
-      for (xv in xvars) {
+    # ── ANOVA (styled card) ───────────────────────────────────────────────────────
+    output$mlrAnova <- renderUI({
+      anova_rows <- lapply(seq_len(nrow(an_mlr)), function(i) {
+        row <- an_mlr[i, ]
+        pv  <- row[["Pr(>F)"]]
+        tags$tr(
+          tags$td(rownames(an_mlr)[i]),
+          tags$td(row$Df),
+          tags$td(fmt_value(row[["Sum Sq"]], 4)),
+          tags$td(fmt_value(row[["Mean Sq"]], 4)),
+          tags$td(if (!is.na(row[["F value"]])) fmt_value(row[["F value"]], 4) else "\u2014"),
+          tags$td(if (!is.null(pv) && !is.na(pv)) sig_badge_mlr(pv) else tags$span("\u2014"))
+        )
+      })
+      regr_ss <- sum(an_mlr[["Sum Sq"]][-nrow(an_mlr)], na.rm = TRUE)
+      res_ss  <- an_mlr[["Sum Sq"]][nrow(an_mlr)]
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("SS Regression", fmt_value(regr_ss, 4), "Variation explained by all predictors", "neutral"),
+          va_metric("SS Residual",   fmt_value(res_ss, 4),  "Unexplained variation", "neutral"),
+          va_metric("Predictors", length(xvars), "In the model", "neutral"),
+          va_metric("Overall p-value", format.pval(fp_mlr, digits = 4), "H\u2080: all slopes = 0", p_status(fp_mlr))
+        ),
+        va_interpretation(
+          "Sequential ANOVA (Type I)",
+          paste0(
+            "Each row shows how much variation that predictor adds, given the predictors already in the model. ",
+            "A small p-value means that predictor adds explanatory power conditional on the earlier predictors. ",
+            if (!is.na(fp_mlr) && fp_mlr < 0.05)
+              paste0("Overall: Reject H\u2080 (p = ", format.pval(fp_mlr, digits = 4), ").")
+            else
+              paste0("Overall: Fail to reject H\u2080 (p = ", format.pval(fp_mlr, digits = 4), ").")
+          ),
+          pills = tagList(
+            va_pill("Type I (sequential) SS", "neutral", "list-ol"),
+            va_pill(
+              if (!is.na(fp_mlr) && fp_mlr < 0.05) "Overall significant" else "Overall not significant",
+              p_status(fp_mlr),
+              if (!is.na(fp_mlr) && fp_mlr < 0.05) "check-circle" else "info-circle"
+            )
+          )
+        ),
+        tags$table(
+          class = "va-table",
+          tags$thead(tags$tr(
+            tags$th("Source"), tags$th("Df"), tags$th("Sum Sq"),
+            tags$th("Mean Sq"), tags$th("F value"), tags$th("p-value")
+          )),
+          tags$tbody(anova_rows)
+        ),
+        va_details("Technical details: ANOVA output", capture.output(print(an_mlr)))
+      )
+    })
+
+    # ── Partial F-Tests (styled card) ────────────────────────────────────────────
+    output$mlrPartialF <- renderUI({
+      pf_results <- lapply(xvars, function(xv) {
         reduced_vars <- setdiff(xvars, xv)
         if (length(reduced_vars) == 0) {
-          red_formula <- if (input$mlrNoIntercept) {
-            as.formula(paste(bt(input$mlrY), "~ 0 + 1"))
-          } else {
-            as.formula(paste(bt(input$mlrY), "~ 1"))
-          }
+          red_formula <- if (input$mlrNoIntercept) as.formula(paste(bt(input$mlrY), "~ 0 + 1")) else as.formula(paste(bt(input$mlrY), "~ 1"))
         } else {
-          red_rhs <- paste(sapply(reduced_vars, bt), collapse = " + ")
-          red_formula <- if (input$mlrNoIntercept) {
-            as.formula(paste(bt(input$mlrY), "~ 0 +", red_rhs))
-          } else {
-            as.formula(paste(bt(input$mlrY), "~", red_rhs))
-          }
+          red_rhs    <- paste(sapply(reduced_vars, bt), collapse = " + ")
+          red_formula <- if (input$mlrNoIntercept) as.formula(paste(bt(input$mlrY), "~ 0 +", red_rhs)) else as.formula(paste(bt(input$mlrY), "~", red_rhs))
         }
         red_model <- lm(red_formula, data = df_mlr)
-        cat(sprintf("H0: beta(%s) = 0\n", xv))
-        print(anova(red_model, model))
-        cat("\n")
-      }
+        av <- anova(red_model, model)
+        list(var = xv, f = av$F[2], p = av[["Pr(>F)"]][2], df1 = av$Df[2], df2 = av$Res.Df[2], tech = capture.output(print(av)))
+      })
+      sig_n <- sum(vapply(pf_results, function(r) !is.na(r$p) && r$p < 0.05, logical(1)))
+      rows_ui <- lapply(pf_results, function(r) {
+        tags$tr(
+          tags$td(tags$strong(r$var)),
+          tags$td(fmt_value(r$f, 4)),
+          tags$td(paste0(r$df1, ", ", r$df2)),
+          tags$td(sig_badge_mlr(r$p)),
+          tags$td(if (!is.na(r$p) && r$p < 0.05)
+            tags$span(class = "va-pill ok", icon("check-circle"), " Significant")
+          else
+            tags$span(class = "va-pill neutral", icon("info-circle"), " Not significant"))
+        )
+      })
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Predictors tested", length(xvars), "One partial test per predictor", "neutral"),
+          va_metric("Individually significant", sig_n,
+            paste0(sig_n, " of ", length(xvars), " carry unique explanatory power"),
+            if (sig_n > 0) "ok" else "warn")
+        ),
+        va_interpretation(
+          "Partial F-tests: H\u2080: \u03b2\u1d62 = 0",
+          paste0(
+            "Each test compares the full model against a reduced model without that predictor. ",
+            "A significant result (p < 0.05) means removing that predictor significantly worsens the fit. ",
+            "Unlike t-tests in the summary, these account for re-fitting the reduced model."
+          ),
+          pills = tagList(
+            va_pill("Partial test: unique contribution", "neutral", "vial"),
+            va_pill(paste(sig_n, "of", length(xvars), "significant"),
+              if (sig_n > 0) "ok" else "warn",
+              if (sig_n > 0) "check-circle" else "exclamation-triangle")
+          )
+        ),
+        tags$table(
+          class = "va-table",
+          tags$thead(tags$tr(
+            tags$th("Predictor"), tags$th("F-stat"), tags$th("df"),
+            tags$th("p-value"), tags$th("Decision")
+          )),
+          tags$tbody(rows_ui)
+        ),
+        va_details("Technical details: each anova() comparison",
+          unlist(lapply(pf_results, function(r) c(paste0("H\u2080: beta(", r$var, ") = 0"), r$tech, ""))))
+      )
     })
 
-    # Confidence intervals
-    output$mlrConfint <- renderPrint({
-      cat("95% Confidence Intervals for Coefficients\n")
-      cat(strrep("=", 50), "\n\n")
-      print(confint(model, level = 0.95))
+
+    # ── Confidence Intervals (styled card) ────────────────────────────────────────
+    output$mlrConfint <- renderUI({
+      ci_df <- as.data.frame(round(ci_mlr, 4))
+      ci_df <- cbind(Term = rownames(ci_df), ci_df)
+      rownames(ci_df) <- NULL
+      names(ci_df) <- c("Term", "Lower 2.5%", "Upper 97.5%")
+      ci_df[["Excludes 0"]] <- ifelse(
+        ci_df[["Lower 2.5%"]] > 0 | ci_df[["Upper 97.5%"]] < 0, "Yes", "No"
+      )
+      tags$div(
+        class = "va-summary",
+        va_interpretation(
+          "95% Confidence intervals for all coefficients",
+          paste0(
+            "Each interval gives a plausible range for the true population coefficient. ",
+            "Intervals that do not contain zero indicate the predictor is statistically significant at the 5% level. ",
+            "Wider intervals indicate less precision due to small sample size or high variance."
+          ),
+          pills = tagList(
+            va_pill("95% confidence level", "neutral", "arrows-alt-h"),
+            va_pill("Excludes 0 \u2192 significant", "ok", "check-circle")
+          )
+        ),
+        va_table(ci_df),
+        va_details("Technical details: confint output", capture.output(print(ci_mlr)))
+      )
     })
 
-    # VIF
-    output$mlrVIF <- renderPrint({
-      if (length(xvars) >= 2) {
-        cat("Variance Inflation Factors (VIF)\n")
-        cat(strrep("=", 40), "\n\n")
-        vif_vals <- vif(model)
-        print(round(vif_vals, 4))
-        cat("\nInterpretation:\n")
-        cat("  VIF < 5  : No serious multicollinearity\n")
-        cat("  5 <= VIF < 10 : Moderate multicollinearity\n")
-        cat("  VIF >= 10 : Severe multicollinearity\n")
-      } else {
-        cat("VIF requires at least 2 predictors.\n")
-      }
+    # ── VIF (styled card + ggplot2 bar) ───────────────────────────────────────────
+    output$mlrVIF <- renderUI({
+      if (length(xvars) < 2) return(tags$div(class = "va-empty", "VIF requires at least 2 predictors."))
+      vif_vals <- tryCatch(vif(model), error = function(e) NULL)
+      if (is.null(vif_vals)) return(tags$div(class = "va-empty", "VIF could not be computed for this model."))
+      vif_df <- data.frame(
+        Predictor = names(vif_vals),
+        VIF       = round(as.numeric(vif_vals), 4),
+        Status    = ifelse(as.numeric(vif_vals) >= 10, "Severe",
+                    ifelse(as.numeric(vif_vals) >= 5,  "Moderate", "OK")),
+        stringsAsFactors = FALSE
+      )
+      max_vif   <- max(vif_df$VIF)
+      mc_status <- if (max_vif >= 10) "bad" else if (max_vif >= 5) "warn" else "ok"
+      tags$div(
+        class = "va-summary",
+        tags$div(
+          class = "va-metric-grid",
+          va_metric("Max VIF", fmt_value(max_vif, 3),
+            if (max_vif >= 10) "Severe multicollinearity" else if (max_vif >= 5) "Moderate concern" else "No serious multicollinearity",
+            mc_status),
+          va_metric("Predictors checked", length(xvars), "All model predictors", "neutral")
+        ),
+        va_interpretation(
+          "Variance Inflation Factors (VIF)",
+          paste0(
+            "VIF measures how much the variance of a coefficient is inflated due to correlation with other predictors. ",
+            "VIF < 5: acceptable. 5\u201310: moderate concern. > 10: severe multicollinearity that may distort coefficient estimates."
+          ),
+          pills = tagList(
+            va_pill("VIF < 5: OK", "ok", "check-circle"),
+            va_pill("VIF \u2265 5: warning", "warn", "exclamation-triangle"),
+            va_pill("VIF \u2265 10: severe", "bad", "times-circle")
+          )
+        ),
+        tags$table(
+          class = "va-table",
+          tags$thead(tags$tr(tags$th("Predictor"), tags$th("VIF"), tags$th("Assessment"))),
+          tags$tbody(lapply(seq_len(nrow(vif_df)), function(i) {
+            st <- if (vif_df$Status[i] == "Severe") "bad" else if (vif_df$Status[i] == "Moderate") "warn" else "ok"
+            tags$tr(
+              tags$td(tags$strong(vif_df$Predictor[i])),
+              tags$td(vif_df$VIF[i]),
+              tags$td(tags$span(class = paste("va-pill", st), vif_df$Status[i]))
+            )
+          }))
+        )
+      )
     })
 
     output$mlrVIFPlot <- renderPlot({
       if (length(xvars) >= 2) {
-        vif_vals <- vif(model)
-        bar_colors <- ifelse(vif_vals >= 10, "#F44336",
-          ifelse(vif_vals >= 5, "#FF9800", "steelblue")
+        vif_vals <- tryCatch(vif(model), error = function(e) NULL)
+        if (is.null(vif_vals)) { plot.new(); text(0.5, 0.5, "VIF could not be computed."); return() }
+        vif_df2 <- data.frame(
+          Predictor = factor(names(vif_vals), levels = names(vif_vals)[order(as.numeric(vif_vals))]),
+          VIF       = as.numeric(vif_vals)
         )
-        barplot(vif_vals,
-          main = "VIF Values",
-          ylab = "VIF",
-          col = bar_colors,
-          horiz = FALSE,
-          ylim = c(0, max(max(vif_vals) * 1.15, 11)),
-          las = 2
-        )
-        abline(h = 5, col = "orange", lwd = 2, lty = 2)
-        abline(h = 10, col = "red", lwd = 2, lty = 3)
-        legend("topright",
-          legend = c("VIF = 5 (moderate)", "VIF = 10 (severe)"),
-          col = c("orange", "red"), lty = c(2, 3), lwd = 2, bty = "n", cex = 0.85
-        )
+        vif_df2$fill <- ifelse(vif_df2$VIF >= 10, "#ef4444", ifelse(vif_df2$VIF >= 5, "#f59e0b", "#22c55e"))
+        ggplot2::ggplot(vif_df2, ggplot2::aes(x = Predictor, y = VIF, fill = fill)) +
+          ggplot2::geom_col(width = 0.65) +
+          ggplot2::geom_hline(yintercept = 5,  color = "#f59e0b", linewidth = 1, linetype = "dashed") +
+          ggplot2::geom_hline(yintercept = 10, color = "#ef4444", linewidth = 1, linetype = "dotted") +
+          ggplot2::geom_text(ggplot2::aes(label = round(VIF, 2)), hjust = -0.15, color = "#e5e7eb", size = 3.6) +
+          ggplot2::coord_flip(clip = "off") +
+          ggplot2::scale_fill_identity() +
+          ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.2))) +
+          ggplot2::labs(
+            title = "Variance Inflation Factors (VIF)",
+            subtitle = "Dashed = VIF 5 (moderate); Dotted = VIF 10 (severe)",
+            x = NULL, y = "VIF"
+          ) +
+          va_plot_theme()
       } else {
         plot.new()
         text(0.5, 0.5, "Need >= 2 predictors for VIF", cex = 1.4)
@@ -6211,21 +8018,56 @@ server <- function(input, output, session) {
           )
         })
 
-        # Leverage-based check
-        output$mlrInterpExtrap <- renderPrint({
-          hii <- hatvalues(mlr_model())
+        # ── Leverage-based interpolation/extrapolation check ─────────────────────
+        output$mlrInterpExtrap <- renderUI({
+          hii   <- hatvalues(mlr_model())
           h_new <- (predict(mlr_model(),
-            newdata = new_data,
-            interval = "confidence", se.fit = TRUE
-          )$se.fit /
-            sigma(mlr_model()))^2
-          result <- ifelse(h_new > max(hii), "EXTRAPOLATION", "interpolation")
-          for (i in seq_along(result)) {
-            cat(sprintf(
-              "Observation %d  =>  %s  (h_new=%.4f, max(hii)=%.4f)\n",
-              i, result[i], h_new[i], max(hii)
-            ))
-          }
+            newdata = new_data, interval = "confidence", se.fit = TRUE
+          )$se.fit / sigma(mlr_model()))^2
+          result    <- ifelse(h_new > max(hii), "EXTRAPOLATION", "interpolation")
+          extrap_n  <- sum(result == "EXTRAPOLATION")
+          rows_ui   <- lapply(seq_along(result), function(i) {
+            is_ext <- result[i] == "EXTRAPOLATION"
+            tags$tr(
+              tags$td(paste("Obs", i)),
+              tags$td(fmt_value(h_new[i], 4)),
+              tags$td(fmt_value(max(hii), 4)),
+              tags$td(tags$span(class = paste("va-pill", if (is_ext) "bad" else "ok"),
+                if (is_ext) icon("exclamation-triangle") else icon("check-circle"),
+                result[i]
+              ))
+            )
+          })
+          tags$div(
+            class = "va-summary",
+            tags$div(
+              class = "va-metric-grid",
+              va_metric("Max training leverage", fmt_value(max(hii), 4), "h_max from fitted model", "neutral"),
+              va_metric("New observations", length(result), "Queried data points", "neutral"),
+              va_metric("Extrapolations", extrap_n,
+                if (extrap_n > 0) "Exceeds max training leverage" else "All within training space",
+                if (extrap_n > 0) "bad" else "ok")
+            ),
+            va_interpretation(
+              "Interpolation vs. Extrapolation (leverage-based)",
+              paste0(
+                "A new point is classified as EXTRAPOLATION if its leverage h_new exceeds the ",
+                "maximum leverage of any training point. Extrapolation means the new point lies ",
+                "outside the predictor space used to fit the model \u2014 its prediction is unreliable."
+              ),
+              pills = tagList(
+                va_pill("h_new \u2264 max(h_ii): interpolation", "ok", "check-circle"),
+                va_pill("h_new > max(h_ii): EXTRAPOLATION", "bad", "exclamation-triangle")
+              )
+            ),
+            tags$table(
+              class = "va-table",
+              tags$thead(tags$tr(
+                tags$th("Observation"), tags$th("h_new"), tags$th("max(h_ii)"), tags$th("Classification")
+              )),
+              tags$tbody(rows_ui)
+            )
+          )
         })
       },
       error = function(e) {
@@ -6267,25 +8109,117 @@ server <- function(input, output, session) {
       vif_obj <- car::vif(fit)
       if (is.matrix(vif_obj)) {
         out <- vif_obj[, 1]
+        names(out) <- rownames(vif_obj)
       } else {
         out <- vif_obj
+        names(out) <- names(vif_obj)
       }
       out <- as.numeric(out)
-      names(out) <- names(vif_obj)
       out
     }, error = function(e) NULL)
   }
 
   poly_metric_row <- function(label, fit, vif_vals = NULL) {
     sm <- summary(fit)
+    max_vif <- if (is.null(vif_vals) || length(vif_vals) == 0 || all(is.na(vif_vals))) {
+      NA_real_
+    } else {
+      max(vif_vals, na.rm = TRUE)
+    }
     data.frame(
       Model = label,
       R_Squared = sm$r.squared,
       Adj_R_Squared = sm$adj.r.squared,
       Residual_SE = sm$sigma,
       AIC = AIC(fit),
-      Max_VIF = if (is.null(vif_vals) || length(vif_vals) == 0) NA_real_ else max(vif_vals, na.rm = TRUE),
+      Max_VIF = max_vif,
       stringsAsFactors = FALSE
+    )
+  }
+
+  reg_r2_status <- function(r2) {
+    if (length(r2) == 0 || is.na(r2)) return("bad")
+    if (r2 >= 0.7) "ok" else if (r2 >= 0.4) "warn" else "neutral"
+  }
+
+  reg_vif_status <- function(vif_value) {
+    if (length(vif_value) == 0 || is.na(vif_value)) return("neutral")
+    if (vif_value >= 10) "bad" else if (vif_value >= 5) "warn" else "ok"
+  }
+
+  reg_f_p_value <- function(fit) {
+    fs <- summary(fit)$fstatistic
+    if (is.null(fs)) return(NA_real_)
+    pf(fs[1], fs[2], fs[3], lower.tail = FALSE)
+  }
+
+  reg_coef_table <- function(fit) {
+    cf <- as.data.frame(summary(fit)$coefficients)
+    cf <- cbind(Term = rownames(cf), cf)
+    rownames(cf) <- NULL
+    names(cf) <- c("Term", "Estimate", "Std_Error", "t_value", "p_value")
+    tags$table(
+      class = "va-table",
+      tags$thead(tags$tr(
+        tags$th("Term"), tags$th("Estimate"), tags$th("Std. Error"),
+        tags$th("t value"), tags$th("p-value"), tags$th("Decision")
+      )),
+      tags$tbody(lapply(seq_len(nrow(cf)), function(i) {
+        pv <- cf$p_value[i]
+        st <- p_status(pv)
+        tags$tr(
+          tags$td(tags$strong(cf$Term[i])),
+          tags$td(fmt_value(cf$Estimate[i], 4)),
+          tags$td(fmt_value(cf$Std_Error[i], 4)),
+          tags$td(fmt_value(cf$t_value[i], 4)),
+          tags$td(format.pval(pv, digits = 4, eps = 0.0001)),
+          tags$td(tags$span(
+            class = paste("va-pill", st),
+            if (!is.na(pv) && pv < 0.05) icon("check-circle") else icon("info-circle"),
+            p_label(pv)
+          ))
+        )
+      }))
+    )
+  }
+
+  reg_model_summary_ui <- function(title, fit, model_note, technical_lines, extra_metrics = NULL, extra_pills = NULL) {
+    sm <- summary(fit)
+    f_p <- reg_f_p_value(fit)
+    tags$div(
+      class = "va-summary",
+      tags$div(
+        class = "va-metric-grid",
+        va_metric("R-squared", fmt_value(sm$r.squared, 4), "Variation explained by the model", reg_r2_status(sm$r.squared)),
+        va_metric("Adjusted R-squared", fmt_value(sm$adj.r.squared, 4), "Penalized for model complexity", reg_r2_status(sm$adj.r.squared)),
+        va_metric("Residual SE", fmt_value(sm$sigma, 4), "Typical error in response units", "neutral"),
+        va_metric("Overall p-value", format.pval(f_p, digits = 4, eps = 0.0001), "H0: all slopes are zero", p_status(f_p)),
+        extra_metrics
+      ),
+      va_interpretation(
+        title,
+        paste0(
+          model_note, " The fitted model explains ", round(100 * sm$r.squared, 1),
+          "% of the observed variation. ",
+          if (!is.na(f_p) && f_p < 0.05) {
+            paste0("The overall F-test is significant (p = ", format.pval(f_p, digits = 4),
+              "), so the model has useful explanatory signal.")
+          } else {
+            paste0("The overall F-test is not significant (p = ", format.pval(f_p, digits = 4),
+              "), so the fitted terms do not show clear explanatory signal at alpha = 0.05.")
+          },
+          " Interpret polynomial terms together as curve shape; individual powers can be unstable when predictors are highly correlated."
+        ),
+        pills = tagList(
+          va_pill(if (!is.na(f_p) && f_p < 0.05) "Overall model significant" else "Overall model not significant",
+            p_status(f_p), if (!is.na(f_p) && f_p < 0.05) "check-circle" else "info-circle"),
+          va_pill(paste("R-squared =", fmt_value(sm$r.squared, 3)), reg_r2_status(sm$r.squared), "chart-line"),
+          extra_pills
+        )
+      ),
+      tags$h5(style = "margin:12px 0 6px; color:#93c5fd; font-weight:700;", "Coefficients"),
+      reg_coef_table(fit),
+      va_details("Technical details: full R summary", technical_lines)
     )
   }
 
@@ -6392,49 +8326,89 @@ server <- function(input, output, session) {
   output$polyFitPlot <- renderPlot({
     req(poly_results())
     r <- poly_results()
-    plot(r$df$x, r$df$y,
-      xlab = r$x_label, ylab = r$y_label,
-      main = "Polynomial Fits by Order",
-      pch = 21, bg = "darkblue", col = "white", cex = 0.9
-    )
     xgrid <- seq(min(r$df$x), max(r$df$x), length.out = 300)
-    cols <- c("#ef4444", "#f59e0b", "#10b981", "#2563eb")
-    for (i in seq_along(r$raw_models)) {
-      preds <- predict(r$raw_models[[i]], newdata = data.frame(x = xgrid))
-      lines(xgrid, preds, col = cols[i], lwd = 2)
-    }
-    legend("topleft", legend = names(r$raw_models), col = cols, lwd = 2, bty = "n")
+    curve_df <- do.call(rbind, lapply(seq_along(r$raw_models), function(i) {
+      data.frame(
+        x = xgrid,
+        y = predict(r$raw_models[[i]], newdata = data.frame(x = xgrid)),
+        Model = names(r$raw_models)[i],
+        stringsAsFactors = FALSE
+      )
+    }))
+    ggplot2::ggplot(r$df, ggplot2::aes(x = x, y = y)) +
+      ggplot2::geom_point(color = "#38bdf8", alpha = 0.68, size = 2.4) +
+      ggplot2::geom_line(data = curve_df, ggplot2::aes(x = x, y = y, color = Model), linewidth = 1.05) +
+      ggplot2::scale_color_manual(values = c("#f97316", "#22c55e", "#eab308", "#a78bfa")) +
+      ggplot2::labs(
+        title = "Polynomial Fits by Order",
+        subtitle = "Compare curve shape against the observed data before choosing model complexity",
+        x = r$x_label,
+        y = r$y_label,
+        color = "Model"
+      ) +
+      va_plot_theme()
   })
 
-  output$polySummary <- renderPrint({
+  output$polySummary <- renderUI({
     req(poly_results())
     r <- poly_results()
     degree_label <- names(r$raw_models)[r$selected_degree]
-    cat(degree_label, "model (raw x)\n")
-    cat(strrep("=", 45), "\n\n")
-    print(summary(r$raw_models[[r$selected_degree]]))
-    cat("\n", degree_label, "model after centering x\n", sep = "")
-    cat(strrep("=", 45), "\n\n")
-    print(summary(r$centered_models[[r$selected_degree]]))
+    fit <- r$raw_models[[r$selected_degree]]
+    centered_fit <- r$centered_models[[r$selected_degree]]
+    sm <- summary(fit)
+    cent_sm <- summary(centered_fit)
+    aic_best <- r$poly_compare$Model[which.min(r$poly_compare$AIC)]
+    reg_model_summary_ui(
+      paste(degree_label, "polynomial model"),
+      fit,
+      paste0(
+        "This selected raw-x polynomial is compared with lower and higher orders. ",
+        "The lowest AIC among the fitted orders is currently ", aic_best, "."
+      ),
+      c(
+        paste(degree_label, "model (raw x)"),
+        strrep("=", 45),
+        capture.output(print(sm)),
+        "",
+        paste(degree_label, "model after centering x"),
+        strrep("=", 45),
+        capture.output(print(cent_sm))
+      ),
+      extra_metrics = tagList(
+        va_metric("AIC", fmt_value(AIC(fit), 3), "Lower is better among compared models", "neutral"),
+        va_metric("Best AIC order", aic_best, "From linear through quartic", if (aic_best == degree_label) "ok" else "warn")
+      ),
+      extra_pills = tagList(
+        va_pill(paste("Selected:", degree_label), "neutral", "sliders-h"),
+        va_pill(paste("Best AIC:", aic_best), if (aic_best == degree_label) "ok" else "warn", "trophy")
+      )
+    )
   })
 
   output$polyResidualPlot <- renderPlot({
     req(poly_results())
     r <- poly_results()
-    old_par <- par(no.readonly = TRUE)
-    on.exit(par(old_par))
-    par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
-    for (i in seq_along(r$raw_models)) {
+    resid_df <- do.call(rbind, lapply(seq_along(r$raw_models), function(i) {
       fit <- r$raw_models[[i]]
-      plot(
-        fitted(fit), resid(fit),
-        pch = 19, col = "#2563eb",
-        xlab = "Fitted", ylab = "Residuals",
-        main = names(r$raw_models)[i]
+      data.frame(
+        fitted = fitted(fit),
+        residual = resid(fit),
+        Model = names(r$raw_models)[i],
+        stringsAsFactors = FALSE
       )
-      abline(h = 0, col = "red", lwd = 2)
-      lines(lowess(fitted(fit), resid(fit)), col = "darkorange", lwd = 2)
-    }
+    }))
+    ggplot2::ggplot(resid_df, ggplot2::aes(x = fitted, y = residual)) +
+      ggplot2::geom_hline(yintercept = 0, color = "#f97316", linewidth = 0.9, linetype = "dashed") +
+      ggplot2::geom_point(color = "#38bdf8", alpha = 0.66, size = 1.9) +
+      ggplot2::geom_smooth(method = "loess", formula = y ~ x, se = FALSE, color = "#22c55e", linewidth = 0.9) +
+      ggplot2::facet_wrap(~Model, scales = "free_x") +
+      ggplot2::labs(
+        title = "Residual Diagnostics by Polynomial Order",
+        subtitle = "A good fit has residuals scattered around zero without a clear curve",
+        x = "Fitted values",
+        y = "Residuals"
+      ) +
+      va_plot_theme()
   })
 
   output$polyCenterCompare <- renderDT({
@@ -6449,8 +8423,13 @@ server <- function(input, output, session) {
     req(poly_results())
     r <- poly_results()
     if (r$selected_degree == 1) {
-      plot.new()
-      text(0.5, 0.5, "VIF is not informative for a linear model with one predictor.", cex = 1.1)
+      ggplot2::ggplot() +
+        ggplot2::annotate("text", x = 0, y = 0, label = "VIF is not informative for a linear model with one predictor.", color = "#e5e7eb", size = 4.5) +
+        ggplot2::xlim(-1, 1) +
+        ggplot2::ylim(-1, 1) +
+        ggplot2::labs(title = "Variance Inflation Factors") +
+        va_plot_theme() +
+        ggplot2::theme(axis.text = ggplot2::element_blank(), axis.title = ggplot2::element_blank(), panel.grid = ggplot2::element_blank())
       return()
     }
 
@@ -6465,32 +8444,88 @@ server <- function(input, output, session) {
     if (!is.null(cent_vif)) mat["Centered", names(cent_vif)] <- cent_vif
     mat[is.na(mat)] <- 0
 
-    barplot(mat,
-      beside = TRUE, col = c("#ef4444", "#10b981"),
-      las = 2, ylab = "VIF", main = "Variance Inflation Factors"
-    )
-    abline(h = 5, col = "darkorange", lty = 2, lwd = 2)
-    legend("topright", legend = rownames(mat), fill = c("#ef4444", "#10b981"), bty = "n")
+    vif_df <- do.call(rbind, lapply(rownames(mat), function(scale_label) {
+      data.frame(
+        Term = names(mat[scale_label, ]),
+        VIF = as.numeric(mat[scale_label, ]),
+        Scale = scale_label,
+        stringsAsFactors = FALSE
+      )
+    }))
+    ggplot2::ggplot(vif_df, ggplot2::aes(x = Term, y = VIF, fill = Scale)) +
+      ggplot2::geom_col(position = ggplot2::position_dodge(width = 0.72), width = 0.65) +
+      ggplot2::geom_hline(yintercept = 5, color = "#f59e0b", linewidth = 0.9, linetype = "dashed") +
+      ggplot2::geom_hline(yintercept = 10, color = "#ef4444", linewidth = 0.9, linetype = "dotted") +
+      ggplot2::scale_fill_manual(values = c(Raw = "#ef4444", Centered = "#22c55e")) +
+      ggplot2::labs(
+        title = "Variance Inflation Factors",
+        subtitle = "Dashed = 5 (moderate concern); dotted = 10 (severe concern)",
+        x = NULL,
+        y = "VIF",
+        fill = NULL
+      ) +
+      va_plot_theme() +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
   })
 
-  output$polyCenterText <- renderPrint({
+  output$polyCenterText <- renderUI({
     req(poly_results())
     r <- poly_results()
     raw_vif <- r$raw_vifs[[r$selected_degree]]
     cent_vif <- r$centered_vifs[[r$selected_degree]]
-
-    cat("Centering interpretation\n")
-    cat(strrep("=", 35), "\n\n")
-    cat("Selected order:", names(r$raw_models)[r$selected_degree], "\n")
+    degree_label <- names(r$raw_models)[r$selected_degree]
     if (r$selected_degree == 1) {
-      cat("Centering does not change the shape of a first-order fit, so there is no multicollinearity issue to solve.\n")
-      return()
+      return(tags$div(
+        class = "va-summary",
+        va_interpretation(
+          "Centering interpretation",
+          "Centering does not change the shape of a first-order fit, and with only one predictor there is no polynomial-term multicollinearity to diagnose.",
+          pills = tagList(va_pill("Linear model", "neutral", "info-circle"))
+        ),
+        va_details("Technical details",
+          c("Selected order: Linear", "VIF is not informative for a first-order one-predictor model."))
+      ))
     }
     raw_max <- if (is.null(raw_vif)) NA_real_ else max(raw_vif, na.rm = TRUE)
     cent_max <- if (is.null(cent_vif)) NA_real_ else max(cent_vif, na.rm = TRUE)
-    cat(sprintf("Raw max VIF: %.4f\n", raw_max))
-    cat(sprintf("Centered max VIF: %.4f\n\n", cent_max))
-    cat("Centering keeps the fitted curve and R-squared essentially unchanged, but usually reduces the VIF values by removing part of the ill-conditioning in x, x^2, x^3, ...\n")
+    reduction <- if (is.finite(raw_max) && raw_max != 0 && is.finite(cent_max)) 100 * (raw_max - cent_max) / raw_max else NA_real_
+    raw_df <- data.frame(
+      Term = names(raw_vif),
+      Raw_VIF = round(as.numeric(raw_vif), 4),
+      Centered_VIF = round(as.numeric(cent_vif[names(raw_vif)]), 4),
+      check.names = FALSE
+    )
+    tags$div(
+      class = "va-summary",
+      tags$div(
+        class = "va-metric-grid",
+        va_metric("Selected order", degree_label, "Raw and centered fits compared", "neutral"),
+        va_metric("Raw max VIF", fmt_value(raw_max, 3), "Before centering", reg_vif_status(raw_max)),
+        va_metric("Centered max VIF", fmt_value(cent_max, 3), "After subtracting mean(x)", reg_vif_status(cent_max)),
+        va_metric("VIF reduction", if (is.na(reduction)) "N/A" else paste0(fmt_value(reduction, 1), "%"), "Positive means centering helped", if (!is.na(reduction) && reduction > 0) "ok" else "neutral")
+      ),
+      va_interpretation(
+        "Centering and multicollinearity",
+        paste0(
+          "Centering keeps the fitted curve and R-squared essentially unchanged, but it often reduces VIF by making x, x^2, x^3, and higher powers less collinear. ",
+          "Use the centered coefficients for more stable inference; use the plot to communicate the fitted relationship."
+        ),
+        pills = tagList(
+          va_pill("VIF < 5: acceptable", "ok", "check-circle"),
+          va_pill("VIF 5-10: moderate", "warn", "exclamation-triangle"),
+          va_pill("VIF > 10: severe", "bad", "times-circle")
+        )
+      ),
+      va_table(raw_df),
+      va_details("Technical details: raw and centered VIF values",
+        c(
+          "Raw VIF:",
+          capture.output(print(raw_vif)),
+          "",
+          "Centered VIF:",
+          capture.output(print(cent_vif))
+        ))
+    )
   })
 
   output$polySplineCompare <- renderDT({
@@ -6507,41 +8542,74 @@ server <- function(input, output, session) {
     cubic_spline <- r$spline_models[["Cubic spline (2 knots)"]]
     poly_fit <- r$raw_models[[r$selected_degree]]
     xgrid <- seq(min(r$df$x), max(r$df$x), length.out = 300)
-    plot(r$df$x, r$df$y,
-      xlab = r$x_label, ylab = r$y_label,
-      main = "Selected Polynomial vs Cubic Spline",
-      pch = 21, bg = "darkblue", col = "white", cex = 0.9
+    curve_df <- rbind(
+      data.frame(x = xgrid, y = predict(poly_fit, newdata = data.frame(x = xgrid)), Model = paste(names(r$raw_models)[r$selected_degree], "polynomial")),
+      data.frame(x = xgrid, y = predict(cubic_spline, newdata = data.frame(x = xgrid)), Model = "Cubic spline")
     )
-    lines(xgrid, predict(poly_fit, newdata = data.frame(x = xgrid)), col = "#ef4444", lwd = 2, lty = 2)
-    lines(xgrid, predict(cubic_spline, newdata = data.frame(x = xgrid)), col = "#10b981", lwd = 2)
-    abline(v = r$knot_pair, col = "grey50", lty = 3)
-    legend("topleft",
-      legend = c(paste(names(r$raw_models)[r$selected_degree], "polynomial"), "Cubic spline", "Knots"),
-      col = c("#ef4444", "#10b981", "grey50"),
-      lty = c(2, 1, 3), lwd = c(2, 2, 1), bty = "n"
-    )
+    curve_cols <- c("#f97316", "#22c55e")
+    names(curve_cols) <- c(paste(names(r$raw_models)[r$selected_degree], "polynomial"), "Cubic spline")
+    ggplot2::ggplot(r$df, ggplot2::aes(x = x, y = y)) +
+      ggplot2::geom_point(color = "#38bdf8", alpha = 0.68, size = 2.4) +
+      ggplot2::geom_line(data = curve_df, ggplot2::aes(x = x, y = y, color = Model, linetype = Model), linewidth = 1.1) +
+      ggplot2::geom_vline(xintercept = r$knot_pair, color = "#cbd5e1", linewidth = 0.8, linetype = "dotted") +
+      ggplot2::scale_color_manual(values = curve_cols) +
+      ggplot2::labs(
+        title = "Selected Polynomial vs Cubic Spline",
+        subtitle = paste("Knots:", paste(fmt_value(r$knot_pair, 3), collapse = ", ")),
+        x = r$x_label,
+        y = r$y_label,
+        color = NULL,
+        linetype = NULL
+      ) +
+      va_plot_theme()
   })
 
-  output$polySplineSummary <- renderPrint({
+  output$polySplineSummary <- renderUI({
     req(poly_results())
     r <- poly_results()
-    cat("Cubic spline with two knots\n")
-    cat(strrep("=", 35), "\n")
-    cat("Knots:", paste(r$knot_pair, collapse = ", "), "\n\n")
-    print(summary(r$spline_models[["Cubic spline (2 knots)"]]))
+    fit <- r$spline_models[["Cubic spline (2 knots)"]]
+    best_spline <- r$spline_compare$Model[which.min(r$spline_compare$AIC)]
+    reg_model_summary_ui(
+      "Cubic spline with two knots",
+      fit,
+      paste0(
+        "The cubic spline allows the curve to bend around knots at ",
+        paste(fmt_value(r$knot_pair, 3), collapse = " and "), ". ",
+        "Among the displayed polynomial/spline candidates, the lowest AIC is currently ", best_spline, "."
+      ),
+      c(
+        "Cubic spline with two knots",
+        strrep("=", 35),
+        paste("Knots:", paste(r$knot_pair, collapse = ", ")),
+        "",
+        capture.output(print(summary(fit)))
+      ),
+      extra_metrics = tagList(
+        va_metric("Knots", paste(fmt_value(r$knot_pair, 3), collapse = ", "), "Piecewise breakpoints", "neutral"),
+        va_metric("Best AIC model", best_spline, "From spline comparison table", if (best_spline == "Cubic spline (2 knots)") "ok" else "warn")
+      ),
+      extra_pills = tagList(
+        va_pill("Spline terms act together", "neutral", "project-diagram"),
+        va_pill(paste("Best AIC:", best_spline), if (best_spline == "Cubic spline (2 knots)") "ok" else "warn", "trophy")
+      )
+    )
   })
 
   output$polySplineResidualPlot <- renderPlot({
     req(poly_results())
     fit <- poly_results()$spline_models[["Cubic spline (2 knots)"]]
-    plot(
-      fitted(fit), resid(fit),
-      xlab = "Fitted", ylab = "Residuals",
-      main = "Cubic Spline Residuals vs Fitted",
-      pch = 19, col = "#10b981"
-    )
-    abline(h = 0, col = "red", lwd = 2)
-    lines(lowess(fitted(fit), resid(fit)), col = "darkorange", lwd = 2)
+    resid_df <- data.frame(fitted = fitted(fit), residual = resid(fit))
+    ggplot2::ggplot(resid_df, ggplot2::aes(x = fitted, y = residual)) +
+      ggplot2::geom_hline(yintercept = 0, color = "#f97316", linewidth = 0.9, linetype = "dashed") +
+      ggplot2::geom_point(color = "#22c55e", alpha = 0.72, size = 2.2) +
+      ggplot2::geom_smooth(method = "loess", formula = y ~ x, se = FALSE, color = "#38bdf8", linewidth = 0.95) +
+      ggplot2::labs(
+        title = "Cubic Spline Residuals vs Fitted",
+        subtitle = "Look for random scatter around zero; patterns suggest remaining nonlinearity",
+        x = "Fitted values",
+        y = "Residuals"
+      ) +
+      va_plot_theme()
   })
 
   # ===== CHAPTER 6: LEVERAGE & INFLUENCE SERVER =====
